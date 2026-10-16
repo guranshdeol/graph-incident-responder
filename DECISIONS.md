@@ -31,3 +31,15 @@ One line per non-obvious choice (plan §15.4). Newest at the bottom.
 - **Sandbox executor** reactivates the inactive rule through W1 (same rule_id) and writes a `by_agent` Change. Live AWS executors are P2's.
 - **New queries:** Q9 dependencies, Q10 removed_path_rules, Q11 removed_rules_on_firewall (action precondition + exact spec), Q12 open_incident_for_group, Q13 incident_alerts, Q14 get_action, Q15 active_rules_on_firewall (sandbox fault injection), Q16 service_host; W4b alert TARGET, W5b attach alerts, W7 SUSPECTS, W8 create action, W9 state transition (guarded by allowed `from` states), W10 finding, W11 incident report/status.
 - **Scenario fixtures** are YAML in `graph/fixtures/scenarios/` and are injected exactly like live data: discovery-style diff (W1+W2), CloudTrail Change (W3), Alertmanager payload through `ingest/alerts.py`.
+
+## API + UI (Sat 17 Oct 2026)
+
+- **Webhook → ingest → investigate:** `/hooks/alertmanager` (bearer WEBHOOK_TOKEN) saves the raw payload, ingests into `GRAPH_NAME` (default ops_sandbox) and investigates newly opened incidents in a background task. Without `PROMETHEUS_URL` every probe is "unknown", so live-webhook incidents rank on graph evidence only until P3's Prometheus is reachable.
+- **Sandbox mode is open on purpose:** inject / reset / approve / reject need no token while `SANDBOX_MODE=true`, so judges can click through. Effects are graph-only. With `SANDBOX_MODE=false` they need `Bearer $ADMIN_TOKEN`, and approve returns 501 until P2's live executors exist.
+- **One writer at a time:** a process-wide lock serialises injections, investigations and approvals (one uvicorn worker).
+- **Multiple causes (S5):** approving one of several proposed actions executes it but verification waits until no proposed/approved action remains; then every executed action is verified and the incident closed with each as a ROOT_CAUSE.
+- **Sandbox recovery** rebuilds the scenario from `report.scenario` {name, now}, so the resolved payload hits the same alert ids even after an API restart.
+- **Rule-removal injection happens at injection time** (not `now + at_offset`): otherwise S4 run within ~2 min of fixing S1 replays the removal at a time older than the agent's restore, and the W2 diff doesn't see it.
+- **Graph panel shows the current graph**, not a snapshot at incident time (said in the UI).
+- **UI** is one static file (cytoscape 3.30.2 from cdnjs, no build step). All data is inserted with textContent, never innerHTML.
+- **New queries:** Q17/Q18 graph panel, Q19 incident list, Q20 incident detail.

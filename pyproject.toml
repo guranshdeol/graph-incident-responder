@@ -5,11 +5,16 @@ description = "Graph-backed incident responder (WeMakeDevs x FalkorDB Graph Hack
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "falkordb",
+    "fastapi>=0.143.3",
     "pyyaml",
+    "uvicorn[standard]>=0.54.0",
 ]
 
 [dependency-groups]
-dev = ["pytest"]
+dev = [
+    "httpx>=0.28.1",
+    "pytest",
+]
 
 [tool.uv]
 package = false

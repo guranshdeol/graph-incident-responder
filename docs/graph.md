@@ -119,7 +119,7 @@ CREATE INDEX FOR (x:Action) ON (x.id);
 
 # Cypher catalogue
 
-Every query file in `graph/queries/`, copied verbatim. The leading `//` comment lines are removed; nothing else is changed. Files are listed in name order (`q1`…`q16`, then `w1`, `w1b`, `w2`…`w11`). The `$name` placeholders are parameters bound by the caller.
+Every query file in `graph/queries/`, copied verbatim. The leading `//` comment lines are removed; nothing else is changed. Files are listed in name order (`q1`…`q20`, then `w1`, `w1b`, `w2`…`w11`). The `$name` placeholders are parameters bound by the caller.
 
 ## Read queries (agent tools)
 
@@ -358,6 +358,60 @@ Params: $rid
 ```cypher
 MATCH (s:Service {rid: $rid})-[:RUNS_ON]->(h:Compute)
 RETURN h.rid AS host, h.name AS host_name
+```
+
+### q17_resource_nodes
+
+Every infrastructure node, for the UI graph panel (`GET /api/graph`).
+
+Params: none
+
+```cypher
+MATCH (n:Resource)
+RETURN n.rid AS rid, labels(n) AS kinds, n.name AS name
+ORDER BY rid
+```
+
+### q18_resource_edges
+
+Infrastructure edges between resources, with ALLOWS_FROM active/port so removed rules can be drawn (`GET /api/graph`).
+
+Params: none
+
+```cypher
+MATCH (a:Resource)-[r:DEPENDS_ON|RUNS_ON|PROTECTS|ALLOWS_FROM]->(b:Resource)
+RETURN a.rid AS source, type(r) AS type, b.rid AS target, r.active AS active,
+       r.port_from AS port_from, r.port_to AS port_to, r.rule_id AS rule_id
+```
+
+### q19_list_incidents
+
+Newest incidents with their rank-1 suspect (`GET /api/incidents`).
+
+Params: $limit
+
+```cypher
+MATCH (i:Incident)
+OPTIONAL MATCH (i)-[s:SUSPECTS]->(r:Resource)
+WHERE s.rank = 1
+RETURN i.id AS id, i.status AS status, i.opened_at AS opened_at, i.closed_at AS closed_at,
+       i.ttr_seconds AS ttr_seconds, r.rid AS top
+ORDER BY opened_at DESC
+LIMIT $limit
+```
+
+### q20_get_incident
+
+One incident's stored report, status and actions (`GET /api/incidents/{id}`).
+
+Params: $id
+
+```cypher
+MATCH (i:Incident {id: $id})
+OPTIONAL MATCH (x:Action)-[:FOR]->(i)
+RETURN i.id AS id, i.status AS status, i.opened_at AS opened_at, i.ttr_seconds AS ttr_seconds,
+       i.report AS report,
+       collect(CASE WHEN x IS NULL THEN null ELSE {id: x.id, kind: x.kind, status: x.status, approved_by: x.approved_by, detail: x.detail} END) AS actions
 ```
 
 ## Write queries (ingestion, investigation, memory)

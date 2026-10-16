@@ -25,7 +25,11 @@ probes:
   i-host1:        {up: 1, cpu: 15}
   i-host2:        {up: 1, cpu: 18}
   "rds:orders-db": {reachable_from: {i-host1: 0, i-host2: 1}}
-probes_after_fix: {}
+probes_after_fix:
+  "svc:web":      {up: 1, error_rate: 0.00, p95: 0.10}
+  "svc:checkout": {up: 1, error_rate: 0.00, p95: 0.10}
+  "svc:payments": {up: 1, error_rate: 0.00, p95: 0.10}
+  "rds:orders-db": {reachable_from: {i-host1: 1, i-host2: 1}}
 expect:
   top_two: [sg-db, "svc:payments"]
   multiple_causes: true

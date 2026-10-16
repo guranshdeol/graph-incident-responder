@@ -113,8 +113,8 @@ class Investigator:
             if ch["outcome"] == ANSWERED and own:
                 c.change_in_window = True
                 change_ids[c.rid] = own[0]["ch.event_id"]
-                c.evidence.append("changed: " + "; ".join(
-                    f"{r['ch.event_name']} by {r['ch.actor'] or r['ch.source']}" for r in own[:3]))
+                c.evidence.append("changed: " + "; ".join(dict.fromkeys(
+                    f"{r['ch.event_name']} by {r['ch.actor'] or r['ch.source']}" for r in own[:3])))
 
         # 5 memory
         recall = self._call(self.tools.recall_incidents(alertnames, list(dict.fromkeys(list(cands) + alerting))))

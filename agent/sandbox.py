@@ -48,7 +48,10 @@ class Scenario:
     # -- faults ---------------------------------------------------------------
 
     def _revoke_rule(self, fw: str, rule_id: str, at_offset: int = 0):
-        ts = self.now + at_offset
+        # Discovery notices the removal at injection time. (Not now + at_offset: if the
+        # agent restored this rule moments ago, its last_seen is newer than an
+        # offset in the past and the W2 diff would not see the rule as gone.)
+        ts = self.now
         _, rules = db.run(self.g, "q15_active_rules_on_firewall", {"fw": fw})
         for r in rules:
             if r["rule_id"] != rule_id:
