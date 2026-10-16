@@ -74,3 +74,9 @@ One line per non-obvious choice (plan §15.4). Newest at the bottom.
 ## MCP server (Sat 17 Oct 2026)
 
 - **`agent/mcp_server.py`** exposes the 10 read tools over MCP (stdio), annotated read-only, same envelopes and the same fixed Cypher as the pipeline. No write, approval or free-form Cypher tool (D8). Built on the MCP Python SDK 2.x (`MCPServer`, the renamed FastMCP). Verified with a real stdio client session.
+
+## LLM model: Nemotron (Sat 17 Oct 2026)
+
+- **`LLM_MODEL=nvidia/nemotron-3-ultra-550b-a55b:free,nvidia/nemotron-3-super-120b-a12b:free`** (team choice: free Nemotron 3 Ultra). At 01:30 IST Ultra's only provider (NVIDIA) was down on OpenRouter (status -5, 0% uptime, 404 on every call), so `LLM_MODEL` takes a fallback list sent as OpenRouter's `models` routing: Ultra first, Nemotron 3 Super when Ultra is unavailable. The model that actually answered is recorded in `explained_by`.
+- **The agent must verify before answering:** the prompt asks for at least one tool call, and one reminder is sent if the first reply has none. First live S1: 2 agent-chosen calls (check_path payments→orders-db, recent_changes sg-db), validator accepted, ~17k tokens in / 1.3k out, ~30 s on the free tier.
+- Known gap: the validator checks resources, citations and the catalogue, not the wording, so a sentence can still be loose (the first run called host-1 "degraded" although its probe was healthy).

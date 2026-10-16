@@ -3,7 +3,7 @@
 Provider: OpenRouter (OpenAI-compatible /chat/completions with tool calling), behind one
 adapter so swapping providers is a config change (D10):
     LLM_API_KEY    OpenRouter key (empty -> LLM step off, template explanation)
-    LLM_MODEL      e.g. an OpenRouter model id that supports tool calling
+    LLM_MODEL      an OpenRouter model id with tool calling; "primary,fallback,..." for fallbacks
     LLM_BASE_URL   default https://openrouter.ai/api/v1
 
 What makes it an agent, not a summariser:
@@ -47,9 +47,10 @@ SYSTEM = """You are rootgraph's incident investigator. A deterministic pipeline 
 FalkorDB infrastructure graph upward from the alerting resources and scored candidate root causes.
 You receive that scorecard and the evidence (each tool call has a call_id).
 
-You may call up to 6 read-only tools to test the ranking, for example to check whether a
-high-coverage candidate is actually healthy, or whether a dependency path is blocked. Every tool
-call MUST include a short `reason` saying what you are checking and why. You cannot write Cypher,
+Before answering, verify the ranking yourself: make at least one and at most 6 read-only tool calls,
+for example to check whether a high-coverage candidate is actually healthy (probe), whether a
+dependency path is blocked (check_path, removed_rules), or who changed the top candidate
+(recent_changes). Every tool call MUST include a short `reason` saying what you are checking and why. You cannot write Cypher,
 change anything, or approve fixes.
 
 Finish with ONLY a JSON object, no prose around it:
@@ -76,7 +77,12 @@ class OpenRouterClient:
         self.api_key, self.model, self.base_url, self.timeout = api_key, model, base_url.rstrip("/"), timeout
 
     def chat(self, messages: list, tools: list | None = None, tool_choice: str | None = None) -> dict:
-        body = {"model": self.model, "messages": messages, "temperature": 0}
+        # LLM_MODEL may list fallbacks ("primary,fallback,..."): OpenRouter's `models` routing
+        # tries them in order when the primary's provider is down
+        models = [m.strip() for m in self.model.split(",") if m.strip()]
+        body = {"model": models[0], "messages": messages, "temperature": 0}
+        if len(models) > 1:
+            body["models"] = models
         if tools:
             body["tools"] = tools
             body["tool_choice"] = tool_choice or "auto"
@@ -146,16 +152,23 @@ class Agent:
         agent_trace: list[dict] = []
         messages = [{"role": "system", "content": SYSTEM},
                     {"role": "user", "content": _bundle(rows, trace, alerting)}]
-        final = None
+        final, served, nudged = None, set(), False
         for _turn in range(MAX_AGENT_CALLS + 2):
             calls_left = MAX_AGENT_CALLS - len(agent_trace)
             resp = self.client.chat(messages, TOOL_SCHEMAS if calls_left > 0 else None)
+            if resp.get("model"):
+                served.add(resp["model"])
             usage = resp.get("usage") or {}
             tokens_in += usage.get("prompt_tokens", 0)
             tokens_out += usage.get("completion_tokens", 0)
             msg = resp["choices"][0]["message"]
             tool_calls = msg.get("tool_calls") or []
             if not tool_calls:
+                if not agent_trace and not nudged and calls_left > 0:
+                    nudged = True  # one reminder: verify with a tool call before answering
+                    messages += [{"role": "assistant", "content": msg.get("content") or ""},
+                                 {"role": "user", "content": "Verify with at least one tool call (with a reason) before your final JSON."}]
+                    continue
                 final = _parse_final(msg.get("content") or "")
                 break
             messages.append({"role": "assistant", "content": msg.get("content") or "", "tool_calls": tool_calls})
@@ -187,7 +200,8 @@ class Agent:
         accepted = not problems
         return {
             "explanation": final["explanation"] if accepted else template,
-            "explained_by": "llm" if accepted else "template (validator: " + "; ".join(problems)[:300] + ")",
+            "explained_by": (f"llm ({', '.join(sorted(served))})" if served else "llm") if accepted
+                            else "template (validator: " + "; ".join(problems)[:300] + ")",
             "root_cause_rid": final["root_cause_rid"] if accepted else None,
             "agent_trace": agent_trace,
             "tokens_in": tokens_in, "tokens_out": tokens_out, "agent_calls": len(agent_trace),

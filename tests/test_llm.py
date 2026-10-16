@@ -91,9 +91,11 @@ def test_unknown_resource_in_explanation_falls_back_to_template(g):
 
 
 def test_rerank_without_agent_evidence_is_rejected(g):
-    rep, _, _ = run_s1(g, [final(root_cause_rid="i-host1", explanation="i-host1 is the cause.",
-                                 evidence_tools=["p1"], proposed_action=None)])
+    wrong = final(root_cause_rid="i-host1", explanation="i-host1 is the cause.", evidence_tools=["p1"], proposed_action=None)
+    rep, model, _ = run_s1(g, [wrong, wrong])  # answers twice without verifying anything
     assert "re-ranking needs new evidence" in rep["explained_by"] and rep["top"] == "sg-db"
+    # the first tool-less answer got one reminder to verify before answering
+    assert "Verify with at least one tool call" in model.sent[1]["messages"][-1]["content"]
 
 
 def test_tool_calls_are_capped(g):
