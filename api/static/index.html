@@ -7,168 +7,174 @@
 <title>rootgraph</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400..600&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;1,8..60,400&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,400&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.30.2/cytoscape.min.js"></script>
 <style>
-/* Design tokens from DESIGN.md ("serif analytics on warm paper").
-   Signifier -> Source Serif 4, Sohne -> Inter (the substitutes DESIGN.md names).
-   Peach/sienna is the only chromatic pair; here it marks what is wrong. */
+/* Design tokens from docs/DESIGN.md ("warm paper notebook under afternoon sun").
+   NotionInter -> Inter, Lyon Text -> Source Serif 4 (the substitutes it names).
+   Blue is the single primary action; accent hues live on pills and one dark card. */
 :root {
-  --ink: #17191c; --paper: #ffffff; --mist: #f2f2f3; --fog: #fafafb; --hair: #ececec;
-  --slate: #777b86; --ash: #979799; --smoke: #a3a6af;
-  --peach: #fbe1d1; --sienna: #5d2a1a;
-  --serif: "Source Serif 4", "Tiempos Headline", ui-serif, Georgia, serif;
-  --sans: "Inter", "Söhne", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --canvas: #f6f5f4; --card: #ffffff; --hair: rgba(0,0,0,.08);
+  --ink: #000000; --ink95: rgba(0,0,0,.95); --ink60: rgba(0,0,0,.6); --ink40: rgba(0,0,0,.4);
+  --graphite: #615d59; --stone: #757575;
+  --blue: #0075de; --sky-tint: #e6f3fe; --sky-wash: #62aef0;
+  --marigold: #ffb110; --coral: #f64932; --peach: #f6d5b8; --midnight: #02093a;
+  --sans: "Inter", "NotionInter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --serif: "Source Serif 4", "Lyon Text", Georgia, serif;
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  --r-card: 24px; --r-elev: 20px; --r-small: 16px; --r-input: 16px; --r-pill: 9999px;
-  --shadow-float: 0 0 0 1px rgba(4,23,43,.05), 0 20px 25px -5px rgba(0,0,0,.1), 0 8px 10px -6px rgba(0,0,0,.1);
-  --page: 1200px;
+  --r-card: 12px; --r-btn: 8px; --r-small: 4px; --r-pill: 9999px;
 }
 * { box-sizing: border-box; }
-html { background: var(--paper); }
-body { margin: 0; background: var(--paper); color: var(--ink); font: 400 16px/1.5 var(--sans); -webkit-font-smoothing: antialiased; }
-.wrap { max-width: var(--page); margin: 0 auto; padding: 0 24px; }
+html, body { background: var(--canvas); }
+body { margin: 0; color: var(--ink95); font: 400 16px/1.5 var(--sans); font-feature-settings: "lnum"; -webkit-font-smoothing: antialiased; }
+.wrap { max-width: 1240px; margin: 0 auto; padding: 0 24px; }
 @media (max-width: 640px) { .wrap { padding: 0 16px; } }
+button, input { font-family: inherit; }
+* { transition: background-color .2s ease, color .2s ease, border-color .2s ease; }
 
-/* nav: transparent, whisper-quiet */
-nav { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 20px 0; }
-.logo { font: 400 26px/1 var(--serif); letter-spacing: -0.23px; }
-nav .right { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; justify-content: flex-end; }
-.tag { font-size: 14px; color: var(--ash); }
-a.arrow { color: var(--ink); text-decoration: none; }
-a.arrow:hover { text-decoration: underline; }
+/* nav: 64px, sticky, the one place with a whisper of shadow */
+nav { position: sticky; top: 0; z-index: 10; background: var(--canvas); box-shadow: 0 .7px 1.462px rgba(0,0,0,.015), 0 3px 9px rgba(0,0,0,.03); }
+nav .wrap { height: 64px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.logo { font-weight: 700; font-size: 20px; letter-spacing: -0.02em; color: var(--ink); display: flex; align-items: center; gap: 8px; }
+.logo .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--coral); box-shadow: 14px 0 0 var(--marigold), 28px 0 0 var(--sky-wash); margin-right: 30px; }
+nav .right { display: flex; align-items: center; gap: 4px; }
+.navlink { color: var(--ink60); text-decoration: none; font-size: 15px; font-weight: 500; padding: 10px 14px; border-radius: var(--r-btn); }
+.navlink:hover { color: var(--ink); }
 
-/* hero */
-.hero { background: var(--fog); padding: 64px 0 56px; }
-.hero h1 { font: 400 clamp(40px, 6.4vw, 64px)/1.15 var(--serif); letter-spacing: -0.015em; margin: 0; max-width: 900px; }
-.hero h1 em { font-style: italic; }
-.hero p.sub { font-size: 18px; font-weight: 430; color: var(--slate); max-width: 680px; margin: 20px 0 28px; letter-spacing: -0.009em; }
-.pills { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-.hero .note { font-size: 14px; color: var(--ash); margin: 16px 0 0; }
+/* hero: centered stack, headline with a highlight pill */
+.hero { text-align: center; padding: 72px 0 40px; }
+.hero h1 { font-weight: 700; font-size: clamp(40px, 6.2vw, 72px); line-height: 1.12; letter-spacing: -0.028em; color: var(--ink); margin: 0 auto; max-width: 980px; }
+.hl { display: inline-block; background: var(--peach); border-radius: var(--r-pill); padding: 0 .32em .04em; line-height: 1.1; }
+.hero .sub { font: 400 18px/1.56 var(--serif); color: var(--graphite); max-width: 680px; margin: 22px auto 30px; }
+.ctas { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.hero .note { font-size: 14px; color: var(--ink60); margin: 18px 0 0; }
 
-/* buttons: pills only */
-button { font: 400 15px/1 var(--sans); border-radius: var(--r-pill); padding: 11px 20px; cursor: pointer; border: 1px solid var(--ink); background: transparent; color: var(--ink); }
-button.fill { background: var(--ink); color: var(--paper); }
-button:hover { background: var(--mist); }
-button.fill:hover { background: #2c2f34; }
-button.link { border: 0; padding: 11px 4px; background: none; }
-button.link:hover { text-decoration: underline; background: none; }
+/* buttons: 8px radius; blue filled = the one primary action */
+button { font-size: 14px; font-weight: 500; border-radius: var(--r-btn); padding: 7px 15px; cursor: pointer; border: 0; background: transparent; color: var(--ink95); line-height: 1.43; }
+button.primary { background: var(--blue); color: #fff; }
+button.primary:hover { background: #005fb8; }
+button.ghost { background: var(--sky-tint); color: var(--blue); }
+button.ghost:hover { background: #d4eafd; }
+button.text:hover { background: rgba(0,0,0,.05); }
+button.outline { border: 1px solid rgba(0,0,0,.9); border-radius: var(--r-small); padding: 4px 10px; }
 button:disabled { opacity: .45; cursor: default; }
-button .k { font-weight: 500; margin-right: 6px; }
+button .k { font-weight: 700; margin-right: 6px; }
 
-/* layout */
-.app { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 24px; padding: 40px 0 96px; }
-@media (max-width: 900px) { .app { grid-template-columns: minmax(0, 1fr); } }
-.card { background: var(--mist); border-radius: var(--r-card); padding: 20px; min-width: 0; }
-.float { background: var(--paper); border-radius: var(--r-elev); box-shadow: var(--shadow-float); padding: 20px; min-width: 0; }
-.peach { background: var(--peach); color: var(--sienna); border-radius: var(--r-card); padding: 32px; }
-.stack > * + * { margin-top: 24px; }
-.label { font-size: 14px; color: var(--ash); margin: 0 0 12px; }
-h2.section { font: 400 26px/1.18 var(--serif); letter-spacing: -0.23px; margin: 0 0 16px; }
-
-/* incidents list */
-.incidents { list-style: none; margin: 0; padding: 0; }
-.incidents li { padding: 12px; border-radius: var(--r-small); cursor: pointer; display: grid; gap: 2px; }
-.incidents li:hover { background: var(--fog); }
-.incidents li.sel { background: var(--paper); }
-.incidents .id { font-family: var(--mono); font-size: 13px; }
-.meta { font-size: 14px; color: var(--slate); }
-
-/* status words: typographic, peach only for trouble */
-.st { display: inline-block; font-size: 13px; line-height: 1; padding: 5px 10px; border-radius: var(--r-pill); background: var(--paper); color: var(--slate); box-shadow: inset 0 0 0 1px var(--hair); white-space: nowrap; }
-.st.alarm { background: var(--peach); color: var(--sienna); box-shadow: none; }
-.st.done { background: var(--ink); color: var(--paper); box-shadow: none; }
-.st.quiet { background: var(--mist); box-shadow: none; }
+/* product surface */
+.app { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 16px; padding: 24px 0 80px; align-items: start; }
+@media (max-width: 920px) { .app { grid-template-columns: minmax(0, 1fr); } }
+.card { background: var(--card); border: 1px solid var(--hair); border-radius: var(--r-card); padding: 24px; min-width: 0; }
+.stack > * + * { margin-top: 16px; }
+.eyebrow { font-size: 12px; letter-spacing: .01em; color: var(--ink40); text-transform: uppercase; font-weight: 600; margin: 0 0 12px; }
+h2.title { font-weight: 700; font-size: 22px; line-height: 1.27; letter-spacing: -0.011em; color: var(--ink); margin: 0 0 16px; }
+.intro { font: 400 16px/1.5 var(--serif); color: var(--graphite); margin: -8px 0 16px; }
 .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.meta { font-size: 14px; color: var(--ink60); }
+
+/* incidents list: kanban-style task cards */
+.incidents { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.incidents li { padding: 10px 12px; border-radius: var(--r-btn); border: 1px solid var(--hair); cursor: pointer; display: grid; gap: 4px; background: var(--card); }
+.incidents li:hover { background: #fbfaf9; }
+.incidents li.sel { border-color: var(--blue); box-shadow: inset 0 0 0 1px var(--blue); }
+.incidents .id { font-family: var(--mono); font-size: 13px; font-weight: 500; color: var(--ink); }
+.incidents li.none { border-style: dashed; cursor: default; color: var(--ink60); font-size: 14px; }
+
+/* pill tags: colored fills carry status */
+.pill { display: inline-block; font-size: 12px; font-weight: 500; line-height: 1.33; padding: 3px 10px; border-radius: var(--r-pill); background: rgba(0,0,0,.06); color: var(--ink95); white-space: nowrap; }
+.pill.open { background: var(--marigold); color: #000; }
+.pill.bad { background: var(--coral); color: #fff; }
+.pill.warn { background: var(--peach); color: #000; }
+.pill.good { background: var(--sky-tint); color: var(--blue); }
+.pill.done { background: var(--blue); color: #fff; }
+.pill.agent { background: var(--midnight); color: #fff; }
 
 /* incident header */
-.inc-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
-.inc-head h1 { font: 400 clamp(30px, 4.4vw, 44px)/1.3 var(--serif); letter-spacing: -0.015em; margin: 0; }
+.inc-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.inc-head h1 { font-weight: 700; font-size: clamp(28px, 4vw, 40px); line-height: 1.2; letter-spacing: -0.03em; margin: 0; color: var(--ink); }
 .alerts { margin-top: 12px; }
-.alerts .a { font-size: 14px; color: var(--slate); }
-.alerts .a b { font-weight: 480; color: var(--ink); }
 
-/* root cause callout: the page's one peach card */
-.peach .label { color: var(--sienna); opacity: .75; }
-.peach .cause { font: 400 clamp(26px, 3.4vw, 34px)/1.25 var(--serif); letter-spacing: -0.01em; margin: 0 0 12px; }
-.peach .expl { font-size: 18px; font-weight: 430; line-height: 1.45; margin: 0; }
-.peach .multi { margin: 16px 0 0; padding-top: 16px; border-top: 1px solid rgba(93,42,26,.18); font-size: 16px; }
-.peach .foot { font-size: 14px; margin-top: 16px; opacity: .8; }
+/* root cause: the dark-mode island */
+.dark { background: var(--midnight); color: #fff; border-radius: var(--r-card); padding: 28px; }
+.dark .eyebrow { color: rgba(255,255,255,.55); }
+.dark .cause { font-weight: 700; font-size: clamp(28px, 4vw, 42px); line-height: 1.1; letter-spacing: -0.036em; margin: 0 0 14px; }
+.dark .cause .hl { background: var(--marigold); color: #000; }
+.dark .expl { font: 400 18px/1.56 var(--serif); color: rgba(255,255,255,.88); margin: 0; }
+.dark .multi { margin: 18px 0 0; padding: 12px 16px; background: var(--coral); border-radius: var(--r-btn); font-weight: 500; }
+.dark .foot { font-size: 13px; color: rgba(255,255,255,.55); margin-top: 16px; }
 
-/* proposed action */
+/* proposed fix */
 .kv { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 8px 20px; margin: 16px 0 20px; font-size: 15px; }
-.kv dt { color: var(--slate); }
-.kv dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
-.action + .action { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--hair); }
-.action h3 { font: 480 18px/1.3 var(--sans); margin: 0; letter-spacing: -0.009em; }
-input[type=text] { font: 400 16px var(--sans); padding: 12px 16px; border-radius: var(--r-input); border: 1px solid var(--hair); background: var(--paper); color: var(--ink); width: 100%; max-width: 360px; }
-input::placeholder { color: var(--smoke); }
+.kv dt { color: var(--ink60); }
+.kv dd { margin: 0; min-width: 0; overflow-wrap: anywhere; color: var(--ink95); }
+.action + .action { margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--hair); }
+.action h3 { font-weight: 700; font-size: 18px; margin: 0; letter-spacing: -0.01em; color: var(--ink); }
+input[type=text] { font-size: 15px; padding: 8px 12px; border-radius: var(--r-btn); border: 1px solid var(--hair); background: var(--canvas); color: var(--ink); width: 100%; max-width: 340px; }
+input::placeholder { color: var(--ink40); }
+input:focus { outline: 2px solid var(--sky-wash); outline-offset: 0; border-color: transparent; }
 
 /* graph */
-#cy { height: 440px; border-radius: var(--r-small); background: var(--fog); }
-.legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; color: var(--slate); margin-top: 12px; }
-.legend i { display: inline-block; width: 20px; height: 0; border-top: 2px solid var(--ink); vertical-align: middle; margin-right: 6px; }
+#cy { height: 440px; border-radius: var(--r-btn); background: var(--canvas); }
+.legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; color: var(--ink60); margin-top: 12px; }
+.legend i { display: inline-block; width: 20px; height: 0; border-top: 2px solid rgba(0,0,0,.7); vertical-align: middle; margin-right: 6px; }
+.legend b { display: inline-block; width: 12px; height: 12px; border-radius: 50%; vertical-align: -1px; margin-right: 6px; }
 
 /* tables */
 .tablewrap { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; font-size: 14px; }
-th, td { text-align: left; padding: 10px 10px; border-bottom: 1px solid var(--hair); vertical-align: top; }
-.card th, .card td { border-bottom-color: #e2e2e5; }
-th { font-weight: 400; color: var(--ash); white-space: nowrap; }
+th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--hair); vertical-align: top; }
+th { font-size: 12px; font-weight: 600; color: var(--ink40); text-transform: uppercase; letter-spacing: .01em; white-space: nowrap; }
 td.num { font-variant-numeric: tabular-nums; text-align: right; }
-tr.top td { font-weight: 480; }
+tr.top td { font-weight: 600; color: var(--ink); }
 #scorecard tr.main td { border-bottom: 0; padding-bottom: 2px; }
 #scorecard tr.ev td { padding-top: 0; font-size: 13px; }
 #trace td:nth-child(4) code { overflow-wrap: anywhere; }
 #trace td:nth-child(4) { min-width: 180px; }
 code, pre { font-family: var(--mono); font-size: 12.5px; }
-pre { background: var(--paper); padding: 12px; border-radius: 12px; overflow-x: auto; white-space: pre-wrap; word-break: break-word; margin: 8px 0; }
+pre { background: var(--canvas); border: 1px solid var(--hair); padding: 12px; border-radius: var(--r-btn); overflow-x: auto; white-space: pre-wrap; word-break: break-word; margin: 8px 0; }
 details summary { cursor: pointer; }
-.fine { font-size: 13px; color: var(--slate); margin: 12px 0 0; }
-.empty { text-align: center; padding: 64px 24px; }
-.empty h2 { font: 400 clamp(28px, 4vw, 44px)/1.3 var(--serif); letter-spacing: -0.015em; margin: 0 0 8px; }
-.empty p { color: var(--slate); margin: 0; }
-.err { color: var(--sienna); }
+.fine { font-size: 13px; color: var(--ink60); margin: 12px 0 0; }
+.empty { text-align: center; padding: 56px 24px; }
+.empty h2 { font-weight: 700; font-size: clamp(26px, 3.4vw, 40px); letter-spacing: -0.03em; line-height: 1.2; margin: 0 0 8px; color: var(--ink); }
+.empty p { font: 400 18px/1.56 var(--serif); color: var(--graphite); margin: 0; }
+.err { color: var(--coral); }
 </style>
 </head>
 <body>
 
-<div class="wrap">
-  <nav>
-    <div class="logo">rootgraph</div>
-    <div class="right">
-      <span class="tag" id="mode"></span>
-      <a class="arrow" href="https://github.com/guranshdeol/graph-incident-responder" target="_blank" rel="noopener">GitHub →</a>
-    </div>
-  </nav>
-</div>
-
-<section class="hero">
+<nav>
   <div class="wrap">
-    <h1>Many alerts, one cause. <em>The graph finds it.</em></h1>
-    <p class="sub">rootgraph walks a FalkorDB graph of your infrastructure upward from the symptoms, proves the cause with the network path and the change behind it, and proposes a fix a human approves. The graph decides, the agent explains, a human acts.</p>
-    <div class="pills" id="scenarios"></div>
-    <p class="note" id="sandboxNote" hidden>Sandbox: a synthetic estate. Scenarios replay recorded faults; approving a fix only changes the graph. <button class="link" id="resetBtn">Reset sandbox →</button></p>
+    <div class="logo"><span class="dot" aria-hidden="true"></span>rootgraph</div>
+    <div class="right">
+      <span class="navlink" id="mode"></span>
+      <a class="navlink" href="https://github.com/guranshdeol/graph-incident-responder" target="_blank" rel="noopener">GitHub</a>
+    </div>
   </div>
-</section>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <h1>Many alerts, <span class="hl">one</span> cause.<br>The graph finds it.</h1>
+    <p class="sub">rootgraph walks a FalkorDB graph of your infrastructure upward from the symptoms, proves the cause with the network path and the change behind it, and proposes a fix that a human approves.</p>
+    <div class="ctas" id="scenarios"></div>
+    <p class="note" id="sandboxNote" hidden>Sandbox: a synthetic estate. Approving a fix only changes the graph. <button class="outline" id="resetBtn">Reset sandbox</button></p>
+  </div>
+</header>
 
 <div class="wrap">
   <div class="app">
-    <aside>
-      <div class="card">
-        <p class="label">Incidents</p>
-        <ul class="incidents" id="incidents"></ul>
-      </div>
+    <aside class="card">
+      <p class="eyebrow">Incidents</p>
+      <ul class="incidents" id="incidents"></ul>
     </aside>
 
     <main>
       <div class="card empty" id="placeholder">
-        <h2>Pick a scenario.</h2>
+        <h2>Pick a scenario above.</h2>
         <p>Start with S1: a security-group rule is revoked and four alerts fire at once.</p>
       </div>
 
       <div id="incident" class="stack" hidden>
-        <div>
+        <div class="card">
           <div class="inc-head">
             <h1 id="incId"></h1>
             <span id="incStatus"></span>
@@ -177,42 +183,45 @@ details summary { cursor: pointer; }
           <div class="alerts row" id="alerts"></div>
         </div>
 
-        <div class="peach">
-          <p class="label">Most likely root cause</p>
-          <p class="cause" id="cause"></p>
+        <div class="dark">
+          <p class="eyebrow">Most likely root cause</p>
+          <p class="cause"><span class="hl" id="cause"></span></p>
           <p class="expl" id="explanation"></p>
           <p class="multi" id="multi" hidden></p>
           <div class="foot"><span id="explainedBy"></span><span id="recall"></span></div>
         </div>
 
-        <div class="float">
-          <h2 class="section">Proposed fix</h2>
+        <div class="card">
+          <h2 class="title">Proposed fix</h2>
+          <p class="intro">Nothing runs until a person approves it.</p>
           <input type="text" id="actor" placeholder="Your name, recorded as the approver" aria-label="Approver name">
           <div id="proposals" style="margin-top:20px"></div>
         </div>
 
-        <div class="float">
-          <h2 class="section">Graph evidence</h2>
+        <div class="card">
+          <h2 class="title">Graph evidence</h2>
           <div id="cy"></div>
           <div class="legend">
             <span><i></i>DEPENDS_ON</span>
-            <span><i style="border-top:1.5px dashed var(--ash)"></i>RUNS_ON · PROTECTS</span>
-            <span><i style="border-top:1.5px dotted var(--smoke)"></i>ALLOWS_FROM</span>
-            <span><i style="border-top:3px solid var(--sienna)"></i>broken path · removed rule</span>
-            <span>dark ring: alerting · peach: top suspect</span>
+            <span><i style="border-top:1.5px dashed rgba(0,0,0,.35)"></i>RUNS_ON · PROTECTS</span>
+            <span><i style="border-top:1.5px dotted rgba(0,0,0,.3)"></i>ALLOWS_FROM</span>
+            <span><i style="border-top:3px solid var(--coral)"></i>broken path · removed rule</span>
+            <span><b style="background:#fff;box-shadow:inset 0 0 0 3px var(--ink)"></b>alerting</span>
+            <span><b style="background:var(--marigold)"></b>top suspect</span>
           </div>
           <p class="fine">Drawn from the graph as it is now; rules restored since the incident show as active again.</p>
         </div>
 
         <div class="card">
-          <h2 class="section">Scorecard</h2>
+          <h2 class="title">Scorecard</h2>
+          <p class="intro">Every candidate the graph surfaced, scored on evidence.</p>
           <div class="tablewrap"><table id="scorecard"></table></div>
           <p class="fine">score = 3·coverage + 2·unhealthy − 2·healthy + 2·broken path + 2·change + 1·memory − 0.25·hops. Heuristic weights, tested on S1–S5.</p>
         </div>
 
         <div class="card">
-          <h2 class="section">Tool trace</h2>
-          <p class="fine" style="margin:0 0 12px">Every step is a fixed Cypher query or fixed PromQL. Open a row to see the query and what it returned.</p>
+          <h2 class="title">Tool trace</h2>
+          <p class="intro">Every step is a fixed Cypher query or fixed PromQL. Open a row to see it.</p>
           <div class="tablewrap"><table id="trace"></table></div>
         </div>
       </div>
@@ -243,19 +252,18 @@ async function api(path, opts = {}) {
   return body;
 }
 
-const ALARM = new Set(["open", "failed", "unhealthy"]), DONE = new Set(["resolved", "verified"]);
-function st(s) {
-  const cls = ALARM.has(s) ? "alarm" : DONE.has(s) ? "done" : (s === "unknown" || s === "rejected") ? "quiet" : "";
-  return el("span", { class: "st " + cls }, s ?? "—");
-}
+const PILL = { open: "open", proposed: "open", approved: "good", executed: "good", resolved: "done", verified: "done",
+               failed: "bad", unhealthy: "bad", degraded: "warn", healthy: "good" };
+function st(s) { return el("span", { class: "pill " + (PILL[s] || "") }, s ?? "—"); }
 
 async function loadScenarios() {
   const data = await api("/api/scenarios");
-  $("mode").textContent = data.sandbox ? "Sandbox · ops_sandbox" : "Live";
+  $("mode").textContent = data.sandbox ? "Sandbox" : "Live";
+  $("mode").title = data.sandbox ? "graph: ops_sandbox (synthetic)" : "graph: ops_live";
   $("sandboxNote").hidden = !data.sandbox;
   if (!data.sandbox) return;
   $("scenarios").replaceChildren(...data.scenarios.map((s, i) =>
-    el("button", { class: i === 0 ? "fill" : "", title: s.title, onclick: async (e) => {
+    el("button", { class: "ghost", title: s.title, onclick: async (e) => {
       const b = e.currentTarget; b.disabled = true;
       try { const r = await api(`/api/scenarios/${s.name}/inject`, { method: "POST" }); await refreshList(); await openIncident(r.incident_id);
             $("incident").scrollIntoView({ behavior: "smooth", block: "start" }); }
@@ -270,7 +278,7 @@ async function refreshList() {
       el("div", { class: "row" }, el("span", { class: "id" }, r.id), st(r.status)),
       el("div", { class: "meta" }, fmtTime(r.opened_at), r.top ? ` · ${r.top}` : "",
          r.ttr_seconds != null ? ` · ${r.ttr_seconds}s` : ""))
-  ) : [el("li", { class: "meta" }, "None yet.")]));
+  ) : [el("li", { class: "none" }, "No incidents yet.")]));
 }
 
 async function openIncident(id) {
@@ -322,10 +330,10 @@ function renderProposals(rep, acts) {
     if (p.prefilled_from) add("Memory", `the same fix resolved ${p.prefilled_from.incident} in ${p.prefilled_from.ttr_seconds}s`);
     if (live.approved_by) add("Approved by", live.approved_by);
     if (live.detail) add("Result", live.detail);
-    const buttons = el("div", { class: "pills" });
+    const buttons = el("div", { class: "row" });
     if (live.status === "proposed") buttons.append(
-      el("button", { class: "fill", onclick: (e) => act(e, a.id, "approve") }, "Approve and execute"),
-      el("button", { onclick: (e) => act(e, a.id, "reject") }, "Reject"));
+      el("button", { class: "primary", onclick: (e) => act(e, a.id, "approve") }, "Approve and execute"),
+      el("button", { class: "text", onclick: (e) => act(e, a.id, "reject") }, "Reject"));
     return el("div", { class: "action" },
       el("div", { class: "row" }, el("h3", {}, a.kind.replaceAll("_", " ")), el("span", { class: "meta" }, "on " + a.target_rid), st(live.status)),
       kv, buttons);
@@ -360,9 +368,9 @@ function renderTrace(rep) {
       t.tool === "probe" && t.rows[0]?.promql?.length ? el("pre", {}, t.rows[0].promql.join("\n")) : null,
       el("pre", {}, JSON.stringify(t.rows, null, 1)));
     return el("tr", {}, el("td", {}, i + 1),
-      el("td", {}, el("span", { class: "st " + (t.by === "agent" ? "done" : "") }, t.by === "agent" ? "agent-chosen" : "pipeline")),
+      el("td", {}, el("span", { class: "pill " + (t.by === "agent" ? "agent" : "") }, t.by === "agent" ? "agent-chosen" : "pipeline")),
       el("td", {}, detail), el("td", {}, el("code", {}, JSON.stringify(t.args))),
-      el("td", {}, el("span", { class: "st " + (t.outcome === "error" ? "alarm" : t.outcome === "not_in_graph" ? "quiet" : "") }, t.outcome)),
+      el("td", {}, el("span", { class: "pill " + (t.outcome === "error" ? "bad" : t.outcome === "not_in_graph" ? "warn" : "good") }, t.outcome)),
       el("td", { class: "num" }, t.ms));
   });
   $("trace").replaceChildren(head, ...rows);
@@ -370,7 +378,7 @@ function renderTrace(rep) {
 
 const COLUMN = { Service: 0, Compute: 1, Firewall: 2, Database: 3 };
 const kindOf = (kinds) => ["Service", "Compute", "Database", "Firewall", "Network", "Internet", "CidrBlock"].find(k => kinds.includes(k)) || "Resource";
-const C = { ink: "#17191c", paper: "#ffffff", hair: "#d9dadd", ash: "#979799", smoke: "#a3a6af", slate: "#777b86", peach: "#fbe1d1", sienna: "#5d2a1a" };
+const C = { ink: "#000000", paper: "#ffffff", hair: "#d6d3d0", ash: "#8f8a85", smoke: "#b3aea9", marigold: "#ffb110", coral: "#f64932", peach: "#f6d5b8" };
 
 async function renderGraph(rep) {
   const data = await api("/api/graph");
@@ -378,7 +386,9 @@ async function renderGraph(rep) {
   const nodes = data.nodes.map(n => {
     const kind = kindOf(n.kinds), col = COLUMN[kind] ?? 4;
     const y = (counts[col] = (counts[col] ?? -1) + 1);
-    return { data: { id: n.rid, label: n.name || n.rid, kind }, position: { x: col * 210, y: y * 72 } };
+    // stagger the firewall column so rule edges between firewalls don't pass through a node
+    const dx = kind === "Firewall" ? (y % 2) * 70 : 0;
+    return { data: { id: n.rid, label: n.name || n.rid, kind }, position: { x: col * 220 + dx, y: y * 78 } };
   });
   const broken = new Set(rep.broken_paths.map(b => `${b.from}|${b.to}`));
   const edges = data.edges.map((e, i) => ({ data: {
@@ -391,21 +401,21 @@ async function renderGraph(rep) {
   cy = cytoscape({
     container: $("cy"), elements: [...nodes, ...edges], layout: { name: "preset", padding: 24 }, wheelSensitivity: 0.2,
     style: [
-      { selector: "node", style: { "label": "data(label)", "font-family": "Inter, system-ui, sans-serif", "font-size": 11, "color": C.ink,
+      { selector: "node", style: { "label": "data(label)", "font-family": "Inter, system-ui, sans-serif", "font-size": 11, "color": "#37352f",
           "text-valign": "bottom", "text-margin-y": 5, "background-color": C.paper, "border-width": 1, "border-color": C.hair, "width": 24, "height": 24 } },
       { selector: "node[kind = 'Firewall']", style: { "shape": "round-rectangle" } },
       { selector: "node[kind = 'Database']", style: { "shape": "barrel" } },
       { selector: "node[kind = 'Compute']", style: { "shape": "round-rectangle", "width": 30 } },
       { selector: "node.alerting", style: { "border-width": 3, "border-color": C.ink } },
-      { selector: "node.top", style: { "background-color": C.peach, "border-width": 3, "border-color": C.sienna, "width": 32, "height": 32 } },
+      { selector: "node.top", style: { "background-color": C.marigold, "border-width": 0, "width": 34, "height": 34 } },
       { selector: "node.ranked", style: { "label": (n) => `${n.data("label")}  #${ranks[n.id()]}` } },
       { selector: "edge", style: { "width": 1.2, "curve-style": "bezier", "target-arrow-shape": "triangle", "arrow-scale": .7,
           "line-color": C.ash, "target-arrow-color": C.ash, "opacity": .55, "font-size": 10, "label": "data(label)",
-          "color": C.sienna, "text-background-color": C.peach, "text-background-opacity": 1, "text-background-padding": 2 } },
-      { selector: "edge[cls = 'dep']", style: { "line-color": C.ink, "target-arrow-color": C.ink, "opacity": .85, "width": 1.6 } },
+          "color": "#ffffff", "text-background-color": C.coral, "text-background-opacity": 1, "text-background-padding": 2 } },
+      { selector: "edge[cls = 'dep']", style: { "line-color": C.ink, "target-arrow-color": C.ink, "opacity": .7, "width": 1.6 } },
       { selector: "edge[cls = 'infra']", style: { "line-style": "dashed", "opacity": .45 } },
       { selector: "edge[cls = 'allow']", style: { "line-color": C.smoke, "target-arrow-color": C.smoke, "line-style": "dotted", "opacity": .5 } },
-      { selector: "edge[cls = 'broken'], edge[cls = 'removed']", style: { "line-color": C.sienna, "target-arrow-color": C.sienna, "opacity": 1, "width": 3 } },
+      { selector: "edge[cls = 'broken'], edge[cls = 'removed']", style: { "line-color": C.coral, "target-arrow-color": C.coral, "opacity": 1, "width": 3 } },
       { selector: "edge[cls = 'removed']", style: { "line-style": "dashed" } },
     ],
   });
