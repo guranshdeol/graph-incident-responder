@@ -1,0 +1,25 @@
+# S2: CPU hog on host-2. orders and reports never call each other; they share a host.
+# SYNTHETIC FIXTURE.
+id: s2
+title: Shared host saturated
+faults: []
+alerts:
+  - {alertname: HighLatencyP95, rid: "svc:orders", severity: page}
+  - {alertname: HighLatencyP95, rid: "svc:reports", severity: page}
+  - {alertname: HighLatencyP95, rid: "svc:web", severity: page}
+  - {alertname: HostCpuSaturated, rid: i-host2, severity: page}
+probes:
+  "svc:web":      {up: 1, error_rate: 0.01, p95: 1.40}
+  "svc:checkout": {up: 1, error_rate: 0.00, p95: 0.10}
+  "svc:payments": {up: 1, error_rate: 0.00, p95: 0.10}
+  "svc:orders":   {up: 1, error_rate: 0.02, p95: 2.30}
+  "svc:reports":  {up: 1, error_rate: 0.00, p95: 3.10}
+  i-host1:        {up: 1, cpu: 25}
+  i-host2:        {up: 1, cpu: 99}
+  "rds:orders-db": {reachable_from: {i-host1: 1, i-host2: 1}}
+probes_after_fix:
+  i-host2:        {up: 1, cpu: 20}
+expect:
+  top: i-host2
+  action: null          # no catalogued safe action; the agent says so
+  multiple_causes: false

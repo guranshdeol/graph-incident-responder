@@ -1,0 +1,26 @@
+# S3: payments container stopped. No infrastructure change.
+# SYNTHETIC FIXTURE.
+id: s3
+title: Plain service failure
+faults: []
+alerts:
+  - {alertname: ServiceDown, rid: "svc:payments", severity: page}
+  - {alertname: HighErrorRate, rid: "svc:checkout", severity: page}
+  - {alertname: HighErrorRate, rid: "svc:web", severity: page}
+probes:
+  "svc:web":      {up: 1, error_rate: 0.50, p95: 0.20}
+  "svc:checkout": {up: 1, error_rate: 0.90, p95: 0.10}
+  "svc:payments": {up: 0}
+  "svc:orders":   {up: 1, error_rate: 0.00, p95: 0.08}
+  "svc:reports":  {up: 1, error_rate: 0.00, p95: 0.10}
+  i-host1:        {up: 1, cpu: 15}
+  i-host2:        {up: 1, cpu: 18}
+  "rds:orders-db": {reachable_from: {i-host1: 1, i-host2: 1}}
+probes_after_fix:
+  "svc:web":      {up: 1, error_rate: 0.00, p95: 0.10}
+  "svc:checkout": {up: 1, error_rate: 0.00, p95: 0.10}
+  "svc:payments": {up: 1, error_rate: 0.00, p95: 0.10}
+expect:
+  top: "svc:payments"
+  action: restart_service
+  multiple_causes: false

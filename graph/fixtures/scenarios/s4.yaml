@@ -1,0 +1,10 @@
+# S4: S1 again, after S1 was resolved. Memory should recall it and pre-fill the fix.
+# SYNTHETIC FIXTURE. Same faults, alerts and probes as s1; new alert start times.
+id: s4
+title: Repeat of S1 (memory)
+repeat_of: s1
+expect:
+  top: sg-db
+  action: restore_firewall_rule
+  multiple_causes: false
+  recalled: true

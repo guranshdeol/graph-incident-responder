@@ -161,6 +161,29 @@ class Tools:
         args = {"limit": limit}
         return self._run("load_bearing", args, "q8_load_bearing", {"limit": max(1, int(limit))})
 
+    def dependencies(self, rid: str) -> dict:
+        args = {"rid": rid}
+        canon = self._resolve_one(rid)
+        if canon is None:
+            return _envelope("dependencies", args, UNKNOWN, rows=[{"unknown": rid}])
+        return self._run(
+            "dependencies", args, "q9_dependencies", {"rid": canon},
+            paths_from=lambda rows: [[canon, r["target"]] for r in rows],
+        )
+
+    def removed_rules(self, from_svc: str, to_rid: str, minutes: int = 30, now: int | None = None) -> dict:
+        """On a broken path: which firewall on the target lost a rule that used to permit it."""
+        args = {"from_svc": from_svc, "to_rid": to_rid, "minutes": minutes}
+        rids, unknown = self._resolve_all([from_svc, to_rid])
+        if unknown:
+            return _envelope("removed_rules", args, UNKNOWN, rows=[{"unknown": u} for u in unknown])
+        now = int(time.time()) if now is None else int(now)
+        return self._run(
+            "removed_rules", args, "q10_removed_path_rules",
+            {"from": rids[0], "to": rids[1], "since": now - int(minutes) * 60},
+            paths_from=lambda rows: [[rids[0], rids[1], r["firewall"]] for r in rows],
+        )
+
 
 def tools_for(graph_name: str | None = None) -> Tools:
     return Tools(db.graph(graph_name))
