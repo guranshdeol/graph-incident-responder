@@ -43,6 +43,14 @@ Fixture scores from `tests/test_scenarios.py` (`graph/fixtures/scenarios/`):
 | S4 S1 repeated | `sg-db` | 7.75 | Includes +1.0 from a recalled incident. |
 | S5 S1 and S3 together | `sg-db` 6.75, `svc:payments` 4.25 | Both causes are shown as "multiple likely causes", with a proposal for each. |
 
+**Does the graph evidence matter?** Same incidents, three rankers ([docs/evaluation.md](docs/evaluation.md), `python -m eval.baseline`):
+
+| Ranker | Correct on S1–S5 |
+|---|---|
+| Coverage only (the node that explains the most alerts) | 2/5: blames healthy host-1 in S1 and S4, misses `sg-db` in S5 |
+| Coverage + hop distance (graph topology, no evidence) | 2/5 |
+| rootgraph scorecard (+ probes, network paths, changes, memory) | 5/5 |
+
 S5 is a documented limitation. The scorecard ranks the causes but does not split the alerts between them.
 
 ## Architecture
@@ -197,7 +205,7 @@ With FalkorDB running (the compose `falkordb` service, published on 127.0.0.1:63
 set -a; . ./.env; set +a; FALKORDB_HOST=localhost PROMETHEUS_URL= LLM_API_KEY= uv run pytest
 ```
 
-71 tests in six files: `tests/test_tools.py` (30, every query through the tools), `tests/test_scenarios.py` (16, the S1–S5 oracles and the approve → verify → memory cycle), `tests/test_aws.py` (9, the live-AWS code against moto), `tests/test_llm.py` (7, the agent loop with a scripted model), `tests/test_api.py` (7) and `tests/test_mcp.py` (2).
+75 tests in seven files: `tests/test_tools.py` (30, every query through the tools), `tests/test_scenarios.py` (16, the S1–S5 oracles and the approve → verify → memory cycle), `tests/test_aws.py` (11, the live-AWS code, host deploy and fault scripts against moto), `tests/test_llm.py` (7, the agent loop with a scripted model), `tests/test_api.py` (8), `tests/test_mcp.py` (2) and `tests/test_eval.py` (1, the evaluation claim).
 
 ### d. Live AWS
 

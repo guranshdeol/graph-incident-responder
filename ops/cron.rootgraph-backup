@@ -1,0 +1,2 @@
+# rootgraph: daily FalkorDB snapshot at 21:30 UTC (03:00 IST); see /opt/rootgraph/app/ops/backup.sh
+30 21 * * * root /opt/rootgraph/app/ops/backup.sh >> /var/log/rootgraph-backup.log 2>&1
