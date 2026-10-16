@@ -207,21 +207,47 @@ def list_scenarios():
 
 # -- sandbox controls ---------------------------------------------------------------
 
+_inject_state = {"busy": False, "last": 0.0}
+INJECT_MIN_INTERVAL = float(os.environ.get("INJECT_MIN_INTERVAL", "15"))
+
+
+def _investigate_scenario_bg(incident_id: str, name: str, t: int):
+    try:
+        with LOCK:
+            sc = sandbox.Scenario(g(), name, t)
+            _investigate(incident_id, sc.probes, scenario={"name": name, "now": t})
+    except Exception:
+        log.exception("investigation of %s failed", incident_id)
+    finally:
+        _inject_state["busy"] = False
+
+
 @app.post("/api/scenarios/{name}/inject")
-def inject(name: str, authorization: str | None = Header(default=None)):
+def inject(name: str, background: BackgroundTasks, authorization: str | None = Header(default=None)):
+    """Faults + firing alerts go in now; the investigation (and LLM step) runs in the background.
+    The UI polls the incident until its report appears. One injection at a time, at most one per
+    INJECT_MIN_INTERVAL seconds, so the public sandbox can't be used to burn LLM quota."""
     _require_operator(authorization)
     if not SANDBOX_MODE:
         raise HTTPException(status_code=409, detail="scenarios only run in sandbox mode")
     if name not in sandbox.names():
         raise HTTPException(status_code=404, detail="no such scenario")
+    wait = INJECT_MIN_INTERVAL - (time.time() - _inject_state["last"])
+    if _inject_state["busy"] or wait > 0:
+        raise HTTPException(status_code=429, detail="An investigation is running or just ran; try again in a few seconds."
+                            if _inject_state["busy"] else f"Please wait {int(wait) + 1}s before the next scenario.")
     with LOCK:
-        t = now()
-        sc = sandbox.Scenario(g(), name, t)
-        res = sc.inject()
-        if not res["incident_id"]:
-            raise HTTPException(status_code=500, detail="scenario opened no incident")
-        report = _investigate(res["incident_id"], sc.probes, scenario={"name": name, "now": t})
-    return {"incident_id": res["incident_id"], "top": report["top"], "opened": res["opened"]}
+        _inject_state.update(busy=True, last=time.time())
+        try:
+            t = now()
+            res = sandbox.Scenario(g(), name, t).inject()
+            if not res["incident_id"]:
+                raise HTTPException(status_code=500, detail="scenario opened no incident")
+        except Exception:
+            _inject_state["busy"] = False
+            raise
+    background.add_task(_investigate_scenario_bg, res["incident_id"], name, t)
+    return {"incident_id": res["incident_id"], "opened": res["opened"], "investigating": True}
 
 
 @app.post("/api/sandbox/reset")

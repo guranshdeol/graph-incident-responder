@@ -48,15 +48,15 @@ Within a minute you should see `sync ok ... 0 changes`. In FalkorDB Browser (SSH
 
 Covered by `demo/README` (demo stack). Each host runs its compose file through SSM or SSH; Alertmanager on host-1 posts to `https://172-232-86-149.sslip.io/hooks/alertmanager` with `WEBHOOK_TOKEN`.
 
-## 5. Switch the API to live
+## 5. Start the live API next to the public sandbox
 
-In `.env`: `SANDBOX_MODE=false` and `GRAPH_NAME=ops_live`, then:
+Set `PROMETHEUS_URL_LIVE=http://<host-1 public IP>:9090` in `.env`, then:
 
 ```bash
-docker compose up -d api
+docker compose --profile aws up -d --build api-live discovery ingester
 ```
 
-Approving then needs `Authorization: Bearer $ADMIN_TOKEN` and runs the real executor. To keep the public sandbox for judges, run a second API container on `ops_sandbox` instead (ask the agent to add it).
+The live UI is `https://172-232-86-149.sslip.io/live/` (graph `ops_live`). Paste `ADMIN_TOKEN` into the token field in its top bar; approvals there run the real AWS executor. The public sandbox at `/` keeps working for judges. Alertmanager on host-1 posts to `/live/hooks/alertmanager` (rendered by `demo.render aws`).
 
 ## 6. Record a real CloudTrail event (plan §6.3)
 

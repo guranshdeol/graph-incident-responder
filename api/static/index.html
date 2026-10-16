@@ -145,6 +145,7 @@ details summary { cursor: pointer; }
   <div class="wrap">
     <div class="logo"><span class="dot" aria-hidden="true"></span>rootgraph</div>
     <div class="right">
+      <span id="tokenBox" hidden><input type="password" id="token" placeholder="Operator token" aria-label="Operator token" style="max-width:180px;padding:6px 10px;font-size:14px"></span>
       <span class="navlink" id="mode"></span>
       <a class="navlink" href="https://github.com/guranshdeol/graph-incident-responder" target="_blank" rel="noopener">GitHub</a>
     </div>
@@ -243,10 +244,13 @@ const fmtTime = (t) => t ? new Date(t * 1000).toLocaleString([], { dateStyle: "m
 const store = { get(k) { try { return localStorage.getItem(k); } catch { return null; } },
                 set(k, v) { try { localStorage.setItem(k, v); } catch {} } };
 
-let current = null, cy = null;
+let current = null, cy = null, sandboxMode = true, pollTimer = null;
 
 async function api(path, opts = {}) {
-  const r = await fetch(path, { headers: { "Content-Type": "application/json" }, ...opts });
+  const headers = { "Content-Type": "application/json" };
+  const token = store.get("rootgraph.token");
+  if (token && !sandboxMode) headers.Authorization = `Bearer ${token}`;
+  const r = await fetch(path, { headers, ...opts });
   const body = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(body.detail || r.statusText);
   return body;
@@ -257,7 +261,9 @@ const PILL = { open: "open", proposed: "open", approved: "good", executed: "good
 function st(s) { return el("span", { class: "pill " + (PILL[s] || "") }, s ?? "—"); }
 
 async function loadScenarios() {
-  const data = await api("/api/scenarios");
+  const data = await api("api/scenarios");
+  sandboxMode = data.sandbox;
+  $("tokenBox").hidden = data.sandbox;
   $("mode").textContent = data.sandbox ? "Sandbox" : "Live";
   $("mode").title = data.sandbox ? "graph: ops_sandbox (synthetic)" : "graph: ops_live";
   $("sandboxNote").hidden = !data.sandbox;
@@ -265,14 +271,14 @@ async function loadScenarios() {
   $("scenarios").replaceChildren(...data.scenarios.map((s, i) =>
     el("button", { class: "ghost", title: s.title, onclick: async (e) => {
       const b = e.currentTarget; b.disabled = true;
-      try { const r = await api(`/api/scenarios/${s.name}/inject`, { method: "POST" }); await refreshList(); await openIncident(r.incident_id);
+      try { const r = await api(`api/scenarios/${s.name}/inject`, { method: "POST" }); await refreshList(); await openIncident(r.incident_id);
             $("incident").scrollIntoView({ behavior: "smooth", block: "start" }); }
       catch (err) { alert(err.message); } finally { b.disabled = false; }
     } }, el("span", { class: "k" }, s.name.toUpperCase()), s.title)));
 }
 
 async function refreshList() {
-  const rows = await api("/api/incidents");
+  const rows = await api("api/incidents");
   $("incidents").replaceChildren(...(rows.length ? rows.map(r =>
     el("li", { class: r.id === current ? "sel" : "", onclick: () => openIncident(r.id) },
       el("div", { class: "row" }, el("span", { class: "id" }, r.id), st(r.status)),
@@ -283,7 +289,7 @@ async function refreshList() {
 
 async function openIncident(id) {
   current = id;
-  render(await api(`/api/incidents/${encodeURIComponent(id)}`));
+  render(await api(`api/incidents/${encodeURIComponent(id)}`));
   refreshList();
 }
 
@@ -293,7 +299,16 @@ function render(inc) {
   $("incId").textContent = inc.id;
   $("incStatus").replaceChildren(st(inc.status));
   $("incTtr").textContent = inc.ttr_seconds != null ? `resolved in ${inc.ttr_seconds}s` : `opened ${fmtTime(inc.opened_at)}`;
-  if (!rep) { $("cause").textContent = "Investigating…"; $("explanation").textContent = ""; return; }
+  clearTimeout(pollTimer);
+  if (!rep) {
+    $("cause").textContent = "Investigating…";
+    $("explanation").textContent = "Walking the graph, checking paths and probes, then the agent verifies the ranking. This takes up to a minute with the LLM on.";
+    for (const id of ["multi"]) $(id).hidden = true;
+    $("explainedBy").textContent = ""; $("recall").textContent = "";
+    $("proposals").replaceChildren(); $("scorecard").replaceChildren(); $("trace").replaceChildren();
+    pollTimer = setTimeout(() => { if (current === inc.id) openIncident(inc.id).catch(() => {}); }, 2500);
+    return;
+  }
 
   $("alerts").replaceChildren(el("span", { class: "a" }, `${rep.alertnames.join(", ")} on `),
     ...rep.alerting.map((r, i) => el("span", { class: "a" }, el("b", {}, r), i < rep.alerting.length - 1 ? "," : "")));
@@ -345,7 +360,7 @@ function renderProposals(rep, acts) {
 async function act(e, id, verb) {
   e.currentTarget.disabled = true;
   const actor = $("actor").value.trim(); store.set("rootgraph.actor", actor);
-  try { await api(`/api/actions/${id}/${verb}`, { method: "POST", body: JSON.stringify({ actor }) }); }
+  try { await api(`api/actions/${id}/${verb}`, { method: "POST", body: JSON.stringify({ actor }) }); }
   catch (err) { alert(err.message); }
   await openIncident(current);
 }
@@ -385,7 +400,7 @@ const kindOf = (kinds) => ["Service", "Compute", "Database", "Firewall", "Networ
 const C = { ink: "#000000", paper: "#ffffff", hair: "#d6d3d0", ash: "#8f8a85", smoke: "#b3aea9", marigold: "#ffb110", coral: "#f64932", peach: "#f6d5b8" };
 
 async function renderGraph(rep) {
-  const data = await api("/api/graph");
+  const data = await api("api/graph");
   const counts = {};
   const nodes = data.nodes.map(n => {
     const kind = kindOf(n.kinds), col = COLUMN[kind] ?? 4;
@@ -433,10 +448,12 @@ async function renderGraph(rep) {
 
 $("resetBtn").addEventListener("click", async () => {
   if (!confirm("Reset the sandbox? This deletes all incidents and memory.")) return;
-  try { await api("/api/sandbox/reset", { method: "POST" }); current = null; $("incident").hidden = true; $("placeholder").hidden = false; await refreshList(); }
+  try { await api("api/sandbox/reset", { method: "POST" }); current = null; $("incident").hidden = true; $("placeholder").hidden = false; await refreshList(); }
   catch (err) { alert(err.message); }
 });
 $("actor").value = store.get("rootgraph.actor") || "";
+$("token").value = store.get("rootgraph.token") || "";
+$("token").addEventListener("change", (e) => store.set("rootgraph.token", e.target.value.trim()));
 
 loadScenarios().catch(e => $("placeholder").append(el("p", { class: "err" }, e.message)));
 refreshList();

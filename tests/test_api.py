@@ -21,6 +21,8 @@ def client(monkeypatch, tmp_path):
     monkeypatch.setenv("SANDBOX_MODE", "true")
     monkeypatch.setenv("HOOKS_DIR", str(tmp_path))
     monkeypatch.delenv("PROMETHEUS_URL", raising=False)
+    monkeypatch.delenv("LLM_API_KEY", raising=False)
+    monkeypatch.setenv("INJECT_MIN_INTERVAL", "0")
     import api.app as app_mod
     app_mod = importlib.reload(app_mod)
     # each API call happens at a distinct, later second, like a human clicking through
@@ -42,8 +44,9 @@ def test_ui_and_health(client):
 
 def test_s1_inject_approve_resolves(client):
     r = client.post("/api/scenarios/s1/inject").json()
-    assert r["top"] == "sg-db"
-    inc = client.get(f"/api/incidents/{r['incident_id']}").json()
+    assert r["investigating"] is True
+    inc = client.get(f"/api/incidents/{r['incident_id']}").json()  # TestClient ran the background task
+    assert inc["report"]["top"] == "sg-db"
     assert inc["status"] == "open" and inc["report"]["scenario"]["name"] == "s1"
     action_id = inc["report"]["proposals"][0]["action"]["id"]
     out = client.post(f"/api/actions/{action_id}/approve", json={"actor": "judge"}).json()
@@ -104,3 +107,11 @@ def test_unknown_things_404(client):
     assert client.get("/api/incidents/INC-nope").status_code == 404
     assert client.post("/api/scenarios/s9/inject").status_code == 404
     assert client.post("/api/actions/ACT-nope/approve", json={}).status_code == 404
+
+
+def test_inject_is_rate_limited(client, monkeypatch):
+    import api.app as app_mod
+    monkeypatch.setattr(app_mod, "INJECT_MIN_INTERVAL", 60.0)
+    assert client.post("/api/scenarios/s3/inject").status_code == 200
+    r = client.post("/api/scenarios/s3/inject")
+    assert r.status_code == 429 and "wait" in r.json()["detail"]

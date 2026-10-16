@@ -20,7 +20,9 @@ import yaml
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
 BUILD = HERE / "build"
-WEBHOOK_URL = os.environ.get("WEBHOOK_URL", "https://172-232-86-149.sslip.io/hooks/alertmanager")
+BASE_URL = os.environ.get("ROOTGRAPH_URL", "https://172-232-86-149.sslip.io")
+WEBHOOK_URL = os.environ.get("WEBHOOK_URL", f"{BASE_URL}/hooks/alertmanager")          # local -> sandbox API
+WEBHOOK_URL_LIVE = os.environ.get("WEBHOOK_URL_LIVE", f"{BASE_URL}/live/hooks/alertmanager")  # aws -> api-live
 
 IMAGES = {
     "prometheus": "prom/prometheus:v2.55.1",
@@ -82,12 +84,12 @@ def prometheus_cfg(env_label, service_targets, node_targets, blackbox_targets, d
     }
 
 
-def alertmanager_cfg(token):
+def alertmanager_cfg(token, url=None):
     return {
         "route": {"receiver": "rootgraph", "group_by": ["env"], "group_wait": "10s",
                   "group_interval": "10s", "repeat_interval": "1h"},
         "receivers": [{"name": "rootgraph", "webhook_configs": [{
-            "url": WEBHOOK_URL, "send_resolved": True,
+            "url": url or WEBHOOK_URL, "send_resolved": True,
             "http_config": {"authorization": {"type": "Bearer", "credentials": token}}}]}],
     }
 
@@ -185,7 +187,7 @@ def render_aws(token):
         [(st["host1"], "node-exporter:9100"), (st["host2"], f"{ip2}:9100")],
         [(st["host1"], "blackbox:9115"), (st["host2"], f"{ip2}:9115")],
         db_addr)
-    for name, svcs, extra in (("host1", host1, {"prometheus.yml": prom, "alertmanager.yml": alertmanager_cfg(token)}),
+    for name, svcs, extra in (("host1", host1, {"prometheus.yml": prom, "alertmanager.yml": alertmanager_cfg(token, WEBHOOK_URL_LIVE)}),
                               ("host2", host2, {})):
         out = BUILD / "aws" / name
         out.mkdir(parents=True, exist_ok=True)

@@ -80,3 +80,8 @@ One line per non-obvious choice (plan §15.4). Newest at the bottom.
 - **`LLM_MODEL=nvidia/nemotron-3-ultra-550b-a55b:free,nvidia/nemotron-3-super-120b-a12b:free`** (team choice: free Nemotron 3 Ultra). At 01:30 IST Ultra's only provider (NVIDIA) was down on OpenRouter (status -5, 0% uptime, 404 on every call), so `LLM_MODEL` takes a fallback list sent as OpenRouter's `models` routing: Ultra first, Nemotron 3 Super when Ultra is unavailable. The model that actually answered is recorded in `explained_by`.
 - **The agent must verify before answering:** the prompt asks for at least one tool call, and one reminder is sent if the first reply has none. First live S1: 2 agent-chosen calls (check_path payments→orders-db, recent_changes sg-db), validator accepted, ~17k tokens in / 1.3k out, ~30 s on the free tier.
 - Known gap: the validator checks resources, citations and the catalogue, not the wording, so a sentence can still be loose (the first run called host-1 "degraded" although its probe was healthy).
+
+## Sandbox polish + live side by side (Sat 17 Oct 2026)
+
+- **Inject returns at once**; the investigation (with the ~25 s LLM step) runs in a background task and the UI polls the incident, showing "Investigating…". One injection at a time and at most one per `INJECT_MIN_INTERVAL` (15 s) → 429, so the public sandbox can't burn the free LLM quota.
+- **Live and sandbox run side by side:** `api-live` (compose profile `aws`, `ops_live`, `SANDBOX_MODE=false`, own hooks dir, `PROMETHEUS_URL_LIVE`) is served at `/live/` by Caddy; `/` stays the public sandbox. The UI uses relative API paths so one page serves both, and shows an operator-token field in live mode (sent as Bearer on every call). AWS Alertmanager posts to `/live/hooks/alertmanager`.

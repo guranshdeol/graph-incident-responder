@@ -37,8 +37,30 @@ services:
       falkordb:
         condition: service_healthy
 
-  # Live AWS workers: off until the estate exists. Start with
-  #   docker compose --profile aws up -d discovery ingester
+  # Live AWS: off until the estate exists. Start with
+  #   docker compose --profile aws up -d --build api-live discovery ingester
+  # api-live serves https://<PUBLIC_HOST>/live/ on ops_live; operator token required,
+  # approvals run the real AWS executor. The public sandbox at / is unaffected.
+  api-live:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    profiles: ["aws"]
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      FALKORDB_HOST: falkordb
+      FALKORDB_PORT: "6379"
+      GRAPH_NAME: ops_live
+      SANDBOX_MODE: "false"
+      PROMETHEUS_URL: ${PROMETHEUS_URL_LIVE:-}
+      HOOKS_DIR: /data/hooks-live
+    volumes:
+      - /opt/rootgraph/data/hooks-live:/data/hooks-live
+    depends_on:
+      falkordb:
+        condition: service_healthy
+
   discovery:
     build:
       context: .
