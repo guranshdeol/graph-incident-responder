@@ -119,7 +119,7 @@ CREATE INDEX FOR (x:Action) ON (x.id);
 
 # Cypher catalogue
 
-Every query file in `graph/queries/`, copied verbatim. The leading `//` comment lines are removed; nothing else is changed. Files are listed in name order (`q1`…`q20`, then `w1`, `w1b`, `w2`…`w22`). The `$name` placeholders are parameters bound by the caller.
+Every query file in `graph/queries/`, copied verbatim. The leading `//` comment lines are removed; nothing else is changed. Files are listed in name order (`q1`…`q21`, then `w1`, `w1b`, `w2`…`w23`). The `$name` placeholders are parameters bound by the caller.
 
 ## Read queries (agent tools)
 
@@ -412,6 +412,19 @@ OPTIONAL MATCH (x:Action)-[:FOR]->(i)
 RETURN i.id AS id, i.status AS status, i.opened_at AS opened_at, i.ttr_seconds AS ttr_seconds,
        i.report AS report,
        collect(CASE WHEN x IS NULL THEN null ELSE {id: x.id, kind: x.kind, status: x.status, approved_by: x.approved_by, detail: x.detail} END) AS actions
+```
+
+### q21_open_action_for
+
+Open_action_for: an action already proposed for this incident, kind and target, so a re-investigation reuses it instead of proposing twice.
+
+Params: $incident_id, $kind, $target_rid
+
+```cypher
+MATCH (x:Action {kind: $kind, status: 'proposed'})-[:FOR]->(:Incident {id: $incident_id})
+MATCH (x)-[:TARGETS]->(:Resource {rid: $target_rid})
+RETURN x.id AS id
+LIMIT 1
 ```
 
 ## Write queries (ingestion, investigation, memory)
@@ -765,6 +778,17 @@ Params: $event_id, $rids
 ```cypher
 MATCH (ch:Change {event_id: $event_id})
 SET ch.unlinked_rids = $rids
+```
+
+### w23_incident_llm_stats
+
+Per-investigation LLM usage on the incident (D16).
+
+Params: $id, $tokens_in, $tokens_out, $agent_calls
+
+```cypher
+MATCH (i:Incident {id: $id})
+SET i.tokens_in = $tokens_in, i.tokens_out = $tokens_out, i.agent_calls = $agent_calls
 ```
 
 # Known limitations

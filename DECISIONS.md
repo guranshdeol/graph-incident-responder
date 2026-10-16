@@ -70,3 +70,7 @@ One line per non-obvious choice (plan §15.4). Newest at the bottom.
 - **Validator** (`agent/validator.py`): root cause must be a scored candidate; every rid token in the text must occur in the evidence; action kind in catalogue and aimed at the root cause; cites ≥1 call that returned rows; a re-rank needs an agent-chosen call among those. Failure or provider error → template text, pipeline proposals unchanged.
 - **Re-rank:** only a validated answer can change `top` (and so the proposal); the scorecard itself is never rewritten (`scorecard_top` kept in the report).
 - **Tokens per investigation** (D16) on the Incident (`tokens_in`, `tokens_out`, `agent_calls`, W23) and shown under the explanation.
+
+## MCP server (Sat 17 Oct 2026)
+
+- **`agent/mcp_server.py`** exposes the 10 read tools over MCP (stdio), annotated read-only, same envelopes and the same fixed Cypher as the pipeline. No write, approval or free-form Cypher tool (D8). Built on the MCP Python SDK 2.x (`MCPServer`, the renamed FastMCP). Verified with a real stdio client session.
