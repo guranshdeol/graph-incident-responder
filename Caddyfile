@@ -1,0 +1,9 @@
+{$PUBLIC_HOST} {
+	encode gzip
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		-Server
+	}
+	reverse_proxy api:8000
+}

@@ -1,0 +1,19 @@
+[project]
+name = "rootgraph"
+version = "0.1.0"
+description = "Graph-backed incident responder (WeMakeDevs x FalkorDB Graph Hacks)"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "falkordb",
+    "pyyaml",
+]
+
+[dependency-groups]
+dev = ["pytest"]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

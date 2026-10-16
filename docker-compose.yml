@@ -1,0 +1,51 @@
+# rootgraph control plane (Linode).
+# Only Caddy is public. Everything else talks over the compose network.
+# Docker's daemon.json binds published ports to 127.0.0.1 by default, so the
+# 0.0.0.0 on Caddy's ports below is deliberate.
+
+services:
+  falkordb:
+    image: falkordb/falkordb:latest
+    restart: unless-stopped
+    environment:
+      REDIS_ARGS: "--requirepass ${FALKORDB_PASSWORD}"
+    volumes:
+      - /opt/rootgraph/data/falkordb:/var/lib/falkordb/data
+    ports:
+      - "127.0.0.1:6379:6379"   # SSH tunnel only
+      - "127.0.0.1:3000:3000"   # FalkorDB Browser, SSH tunnel only
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$FALKORDB_PASSWORD\" --no-auth-warning ping | grep -q PONG"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    env_file: .env
+
+  api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      FALKORDB_HOST: falkordb
+      FALKORDB_PORT: "6379"
+      HOOKS_DIR: /data/hooks
+    volumes:
+      - /opt/rootgraph/data/hooks:/data/hooks
+    depends_on:
+      falkordb:
+        condition: service_healthy
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "0.0.0.0:80:80"
+      - "0.0.0.0:443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - /opt/rootgraph/data/caddy:/data   # certificates; keep, or Let's Encrypt rate-limits us
+    depends_on:
+      - api
