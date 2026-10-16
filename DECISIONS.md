@@ -43,3 +43,4 @@ One line per non-obvious choice (plan §15.4). Newest at the bottom.
 - **Graph panel shows the current graph**, not a snapshot at incident time (said in the UI).
 - **UI** is one static file (cytoscape 3.30.2 from cdnjs, no build step). All data is inserted with textContent, never innerHTML.
 - **New queries:** Q17/Q18 graph panel, Q19 incident list, Q20 incident detail.
+- **UI follows docs/DESIGN.md** (editorial serif on white). Signifier/Söhne are commercial, so Source Serif 4 + Inter (Google Fonts) stand in, as DESIGN.md suggests. Peach/sienna, the only chromatic pair, is reserved for what is wrong: top suspect, broken path, unhealthy, and the single root-cause card. Light theme only, as the design specifies.

@@ -3,143 +3,221 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
 <title>rootgraph</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400..600&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;1,8..60,400&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.30.2/cytoscape.min.js"></script>
 <style>
+/* Design tokens from DESIGN.md ("serif analytics on warm paper").
+   Signifier -> Source Serif 4, Sohne -> Inter (the substitutes DESIGN.md names).
+   Peach/sienna is the only chromatic pair; here it marks what is wrong. */
 :root {
-  --bg: #f6f7f9; --panel: #ffffff; --ink: #1b1f24; --muted: #5f6b7a; --line: #dde2e8;
-  --accent: #2f6fde; --bad: #d23c3c; --warn: #d98a16; --ok: #2e8b57; --chip: #eef1f5;
+  --ink: #17191c; --paper: #ffffff; --mist: #f2f2f3; --fog: #fafafb; --hair: #ececec;
+  --slate: #777b86; --ash: #979799; --smoke: #a3a6af;
+  --peach: #fbe1d1; --sienna: #5d2a1a;
+  --serif: "Source Serif 4", "Tiempos Headline", ui-serif, Georgia, serif;
+  --sans: "Inter", "Söhne", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg: #12151a; --panel: #1a1e25; --ink: #e6e9ee; --muted: #9aa5b4; --line: #2b313b;
-    --accent: #6c9cff; --bad: #ff6b6b; --warn: #f0a83a; --ok: #4cc38a; --chip: #252b35;
-  }
-}
-:root[data-theme="dark"] {
-  --bg: #12151a; --panel: #1a1e25; --ink: #e6e9ee; --muted: #9aa5b4; --line: #2b313b;
-  --accent: #6c9cff; --bad: #ff6b6b; --warn: #f0a83a; --ok: #4cc38a; --chip: #252b35;
+  --r-card: 24px; --r-elev: 20px; --r-small: 16px; --r-input: 16px; --r-pill: 9999px;
+  --shadow-float: 0 0 0 1px rgba(4,23,43,.05), 0 20px 25px -5px rgba(0,0,0,.1), 0 8px 10px -6px rgba(0,0,0,.1);
+  --page: 1200px;
 }
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
-header { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--line); background: var(--panel); flex-wrap: wrap; }
-header h1 { font-size: 16px; margin: 0; letter-spacing: .2px; }
-header .tag { font-size: 12px; color: var(--muted); }
-.badge { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; background: var(--chip); color: var(--muted); white-space: nowrap; }
-.badge.bad { background: color-mix(in srgb, var(--bad) 18%, transparent); color: var(--bad); }
-.badge.ok { background: color-mix(in srgb, var(--ok) 18%, transparent); color: var(--ok); }
-.badge.warn { background: color-mix(in srgb, var(--warn) 20%, transparent); color: var(--warn); }
-.badge.acc { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); }
-.layout { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 16px; padding: 16px; }
-@media (max-width: 860px) { .layout { grid-template-columns: minmax(0, 1fr); } }
-.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; min-width: 0; }
-.panel h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); margin: 0 0 10px; }
-aside .panel + .panel, main .panel + .panel { margin-top: 16px; }
-button { font: inherit; border: 1px solid var(--line); background: var(--chip); color: var(--ink); border-radius: 7px; padding: 6px 10px; cursor: pointer; }
-button:hover { border-color: var(--accent); }
-button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
-button.danger { color: var(--bad); }
-button:disabled { opacity: .5; cursor: default; }
-.scen { display: grid; gap: 6px; }
-.scen button { text-align: left; }
+html { background: var(--paper); }
+body { margin: 0; background: var(--paper); color: var(--ink); font: 400 16px/1.5 var(--sans); -webkit-font-smoothing: antialiased; }
+.wrap { max-width: var(--page); margin: 0 auto; padding: 0 24px; }
+@media (max-width: 640px) { .wrap { padding: 0 16px; } }
+
+/* nav: transparent, whisper-quiet */
+nav { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 20px 0; }
+.logo { font: 400 26px/1 var(--serif); letter-spacing: -0.23px; }
+nav .right { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; justify-content: flex-end; }
+.tag { font-size: 14px; color: var(--ash); }
+a.arrow { color: var(--ink); text-decoration: none; }
+a.arrow:hover { text-decoration: underline; }
+
+/* hero */
+.hero { background: var(--fog); padding: 64px 0 56px; }
+.hero h1 { font: 400 clamp(40px, 6.4vw, 64px)/1.15 var(--serif); letter-spacing: -0.015em; margin: 0; max-width: 900px; }
+.hero h1 em { font-style: italic; }
+.hero p.sub { font-size: 18px; font-weight: 430; color: var(--slate); max-width: 680px; margin: 20px 0 28px; letter-spacing: -0.009em; }
+.pills { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.hero .note { font-size: 14px; color: var(--ash); margin: 16px 0 0; }
+
+/* buttons: pills only */
+button { font: 400 15px/1 var(--sans); border-radius: var(--r-pill); padding: 11px 20px; cursor: pointer; border: 1px solid var(--ink); background: transparent; color: var(--ink); }
+button.fill { background: var(--ink); color: var(--paper); }
+button:hover { background: var(--mist); }
+button.fill:hover { background: #2c2f34; }
+button.link { border: 0; padding: 11px 4px; background: none; }
+button.link:hover { text-decoration: underline; background: none; }
+button:disabled { opacity: .45; cursor: default; }
+button .k { font-weight: 500; margin-right: 6px; }
+
+/* layout */
+.app { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 24px; padding: 40px 0 96px; }
+@media (max-width: 900px) { .app { grid-template-columns: minmax(0, 1fr); } }
+.card { background: var(--mist); border-radius: var(--r-card); padding: 20px; min-width: 0; }
+.float { background: var(--paper); border-radius: var(--r-elev); box-shadow: var(--shadow-float); padding: 20px; min-width: 0; }
+.peach { background: var(--peach); color: var(--sienna); border-radius: var(--r-card); padding: 32px; }
+.stack > * + * { margin-top: 24px; }
+.label { font-size: 14px; color: var(--ash); margin: 0 0 12px; }
+h2.section { font: 400 26px/1.18 var(--serif); letter-spacing: -0.23px; margin: 0 0 16px; }
+
+/* incidents list */
 .incidents { list-style: none; margin: 0; padding: 0; }
-.incidents li { padding: 8px; border-radius: 7px; cursor: pointer; display: grid; gap: 2px; }
-.incidents li:hover, .incidents li.sel { background: var(--chip); }
-.incidents .id { font-family: var(--mono); font-size: 12px; }
-.muted { color: var(--muted); }
+.incidents li { padding: 12px; border-radius: var(--r-small); cursor: pointer; display: grid; gap: 2px; }
+.incidents li:hover { background: var(--fog); }
+.incidents li.sel { background: var(--paper); }
+.incidents .id { font-family: var(--mono); font-size: 13px; }
+.meta { font-size: 14px; color: var(--slate); }
+
+/* status words: typographic, peach only for trouble */
+.st { display: inline-block; font-size: 13px; line-height: 1; padding: 5px 10px; border-radius: var(--r-pill); background: var(--paper); color: var(--slate); box-shadow: inset 0 0 0 1px var(--hair); white-space: nowrap; }
+.st.alarm { background: var(--peach); color: var(--sienna); box-shadow: none; }
+.st.done { background: var(--ink); color: var(--paper); box-shadow: none; }
+.st.quiet { background: var(--mist); box-shadow: none; }
 .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-.banner { padding: 10px 12px; border-radius: 8px; background: color-mix(in srgb, var(--warn) 16%, transparent); border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent); margin-bottom: 12px; }
-.expl { font-size: 15px; margin: 6px 0 0; }
-table { width: 100%; border-collapse: collapse; }
-th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
-th { font-size: 12px; color: var(--muted); font-weight: 600; }
-td.num { font-variant-numeric: tabular-nums; text-align: right; }
-.tablewrap { overflow-x: auto; }
-code, pre { font-family: var(--mono); font-size: 12px; }
-pre { background: var(--chip); padding: 10px; border-radius: 7px; overflow-x: auto; white-space: pre-wrap; word-break: break-word; margin: 6px 0; }
-#cy { height: 420px; border: 1px solid var(--line); border-radius: 8px; }
-.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin-top: 8px; }
-.legend i { display: inline-block; width: 18px; height: 3px; vertical-align: middle; margin-right: 5px; background: var(--muted); }
-.card { border: 1px solid var(--line); border-radius: 8px; padding: 12px; margin-top: 10px; }
-.kv { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 12px; margin: 8px 0; }
-.kv dt { color: var(--muted); }
+
+/* incident header */
+.inc-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.inc-head h1 { font: 400 clamp(30px, 4.4vw, 44px)/1.3 var(--serif); letter-spacing: -0.015em; margin: 0; }
+.alerts { margin-top: 12px; }
+.alerts .a { font-size: 14px; color: var(--slate); }
+.alerts .a b { font-weight: 480; color: var(--ink); }
+
+/* root cause callout: the page's one peach card */
+.peach .label { color: var(--sienna); opacity: .75; }
+.peach .cause { font: 400 clamp(26px, 3.4vw, 34px)/1.25 var(--serif); letter-spacing: -0.01em; margin: 0 0 12px; }
+.peach .expl { font-size: 18px; font-weight: 430; line-height: 1.45; margin: 0; }
+.peach .multi { margin: 16px 0 0; padding-top: 16px; border-top: 1px solid rgba(93,42,26,.18); font-size: 16px; }
+.peach .foot { font-size: 14px; margin-top: 16px; opacity: .8; }
+
+/* proposed action */
+.kv { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 8px 20px; margin: 16px 0 20px; font-size: 15px; }
+.kv dt { color: var(--slate); }
 .kv dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.action + .action { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--hair); }
+.action h3 { font: 480 18px/1.3 var(--sans); margin: 0; letter-spacing: -0.009em; }
+input[type=text] { font: 400 16px var(--sans); padding: 12px 16px; border-radius: var(--r-input); border: 1px solid var(--hair); background: var(--paper); color: var(--ink); width: 100%; max-width: 360px; }
+input::placeholder { color: var(--smoke); }
+
+/* graph */
+#cy { height: 440px; border-radius: var(--r-small); background: var(--fog); }
+.legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; color: var(--slate); margin-top: 12px; }
+.legend i { display: inline-block; width: 20px; height: 0; border-top: 2px solid var(--ink); vertical-align: middle; margin-right: 6px; }
+
+/* tables */
+.tablewrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th, td { text-align: left; padding: 10px 10px; border-bottom: 1px solid var(--hair); vertical-align: top; }
+.card th, .card td { border-bottom-color: #e2e2e5; }
+th { font-weight: 400; color: var(--ash); white-space: nowrap; }
+td.num { font-variant-numeric: tabular-nums; text-align: right; }
+tr.top td { font-weight: 480; }
+#scorecard tr.main td { border-bottom: 0; padding-bottom: 2px; }
+#scorecard tr.ev td { padding-top: 0; font-size: 13px; }
+#trace td:nth-child(4) code { overflow-wrap: anywhere; }
+#trace td:nth-child(4) { min-width: 180px; }
+code, pre { font-family: var(--mono); font-size: 12.5px; }
+pre { background: var(--paper); padding: 12px; border-radius: 12px; overflow-x: auto; white-space: pre-wrap; word-break: break-word; margin: 8px 0; }
 details summary { cursor: pointer; }
-.empty { color: var(--muted); padding: 30px; text-align: center; }
-input[type=text] { font: inherit; padding: 5px 8px; border-radius: 7px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); width: 100%; }
-.err { color: var(--bad); }
+.fine { font-size: 13px; color: var(--slate); margin: 12px 0 0; }
+.empty { text-align: center; padding: 64px 24px; }
+.empty h2 { font: 400 clamp(28px, 4vw, 44px)/1.3 var(--serif); letter-spacing: -0.015em; margin: 0 0 8px; }
+.empty p { color: var(--slate); margin: 0; }
+.err { color: var(--sienna); }
 </style>
 </head>
 <body>
-<header>
-  <h1>rootgraph</h1>
-  <span class="tag">incident responder over a FalkorDB graph: the graph decides, the agent explains, a human acts</span>
-  <span id="mode" class="badge"></span>
-</header>
 
-<div class="layout">
-  <aside>
-    <div class="panel" id="sandboxPanel" hidden>
-      <h2>Sandbox scenarios</h2>
-      <div class="scen" id="scenarios"></div>
-      <div class="row" style="margin-top:10px">
-        <button class="danger" id="resetBtn" title="Reload the fixture estate; deletes incidents and memory">Reset sandbox</button>
+<div class="wrap">
+  <nav>
+    <div class="logo">rootgraph</div>
+    <div class="right">
+      <span class="tag" id="mode"></span>
+      <a class="arrow" href="https://github.com/guranshdeol/graph-incident-responder" target="_blank" rel="noopener">GitHub →</a>
+    </div>
+  </nav>
+</div>
+
+<section class="hero">
+  <div class="wrap">
+    <h1>Many alerts, one cause. <em>The graph finds it.</em></h1>
+    <p class="sub">rootgraph walks a FalkorDB graph of your infrastructure upward from the symptoms, proves the cause with the network path and the change behind it, and proposes a fix a human approves. The graph decides, the agent explains, a human acts.</p>
+    <div class="pills" id="scenarios"></div>
+    <p class="note" id="sandboxNote" hidden>Sandbox: a synthetic estate. Scenarios replay recorded faults; approving a fix only changes the graph. <button class="link" id="resetBtn">Reset sandbox →</button></p>
+  </div>
+</section>
+
+<div class="wrap">
+  <div class="app">
+    <aside>
+      <div class="card">
+        <p class="label">Incidents</p>
+        <ul class="incidents" id="incidents"></ul>
       </div>
-      <p class="muted" style="font-size:12px;margin:8px 0 0">Synthetic fixture estate. Actions only change the graph.</p>
-    </div>
-    <div class="panel">
-      <h2>Incidents</h2>
-      <ul class="incidents" id="incidents"></ul>
-    </div>
-  </aside>
+    </aside>
 
-  <main id="main">
-    <div class="panel empty" id="placeholder">Inject a scenario or pick an incident.</div>
-    <div id="incident" hidden>
-      <div class="panel">
-        <div class="row">
-          <strong id="incId" style="font-family:var(--mono)"></strong>
-          <span id="incStatus" class="badge"></span>
-          <span id="incTtr" class="muted"></span>
+    <main>
+      <div class="card empty" id="placeholder">
+        <h2>Pick a scenario.</h2>
+        <p>Start with S1: a security-group rule is revoked and four alerts fire at once.</p>
+      </div>
+
+      <div id="incident" class="stack" hidden>
+        <div>
+          <div class="inc-head">
+            <h1 id="incId"></h1>
+            <span id="incStatus"></span>
+            <span id="incTtr" class="meta"></span>
+          </div>
+          <div class="alerts row" id="alerts"></div>
         </div>
-        <div id="alerts" class="row" style="margin-top:8px"></div>
-        <div id="multi" class="banner" hidden style="margin-top:12px"></div>
-        <p class="expl" id="explanation"></p>
-        <div class="row muted" style="font-size:12px;margin-top:6px"><span id="explainedBy"></span><span id="recall"></span></div>
-      </div>
 
-      <div class="panel">
-        <h2>Proposed action</h2>
-        <div class="row" style="max-width:340px"><input type="text" id="actor" placeholder="Your name (recorded as approver)"></div>
-        <div id="proposals"></div>
-      </div>
-
-      <div class="panel">
-        <h2>Graph evidence</h2>
-        <div id="cy"></div>
-        <div class="legend">
-          <span><i style="background:var(--accent)"></i>DEPENDS_ON</span>
-          <span><i style="background:var(--muted);opacity:.6"></i>RUNS_ON / PROTECTS</span>
-          <span><i style="background:var(--ok);opacity:.7"></i>ALLOWS_FROM</span>
-          <span><i style="background:var(--bad)"></i>broken path / removed rule</span>
-          <span>orange ring = alerting · red fill = top suspect</span>
+        <div class="peach">
+          <p class="label">Most likely root cause</p>
+          <p class="cause" id="cause"></p>
+          <p class="expl" id="explanation"></p>
+          <p class="multi" id="multi" hidden></p>
+          <div class="foot"><span id="explainedBy"></span><span id="recall"></span></div>
         </div>
-        <p class="muted" style="font-size:12px;margin:6px 0 0">Shows the graph as it is now; rules restored since the incident are drawn as active again.</p>
-      </div>
 
-      <div class="panel">
-        <h2>Scorecard</h2>
-        <div class="tablewrap"><table id="scorecard"></table></div>
-        <p class="muted" style="font-size:12px;margin:8px 0 0">score = 3·coverage + 2·unhealthy − 2·healthy + 2·broken path + 2·change + 1·memory − 0.25·hops (heuristic weights, tested on S1–S5)</p>
-      </div>
+        <div class="float">
+          <h2 class="section">Proposed fix</h2>
+          <input type="text" id="actor" placeholder="Your name, recorded as the approver" aria-label="Approver name">
+          <div id="proposals" style="margin-top:20px"></div>
+        </div>
 
-      <div class="panel">
-        <h2>Tool trace</h2>
-        <div class="tablewrap"><table id="trace"></table></div>
+        <div class="float">
+          <h2 class="section">Graph evidence</h2>
+          <div id="cy"></div>
+          <div class="legend">
+            <span><i></i>DEPENDS_ON</span>
+            <span><i style="border-top:1.5px dashed var(--ash)"></i>RUNS_ON · PROTECTS</span>
+            <span><i style="border-top:1.5px dotted var(--smoke)"></i>ALLOWS_FROM</span>
+            <span><i style="border-top:3px solid var(--sienna)"></i>broken path · removed rule</span>
+            <span>dark ring: alerting · peach: top suspect</span>
+          </div>
+          <p class="fine">Drawn from the graph as it is now; rules restored since the incident show as active again.</p>
+        </div>
+
+        <div class="card">
+          <h2 class="section">Scorecard</h2>
+          <div class="tablewrap"><table id="scorecard"></table></div>
+          <p class="fine">score = 3·coverage + 2·unhealthy − 2·healthy + 2·broken path + 2·change + 1·memory − 0.25·hops. Heuristic weights, tested on S1–S5.</p>
+        </div>
+
+        <div class="card">
+          <h2 class="section">Tool trace</h2>
+          <p class="fine" style="margin:0 0 12px">Every step is a fixed Cypher query or fixed PromQL. Open a row to see the query and what it returned.</p>
+          <div class="tablewrap"><table id="trace"></table></div>
+        </div>
       </div>
-    </div>
-  </main>
+    </main>
+  </div>
 </div>
 
 <script>
@@ -152,11 +230,11 @@ const el = (tag, attrs = {}, ...kids) => {
   for (const k of kids.flat()) if (k != null) n.append(k instanceof Node ? k : String(k));
   return n;
 };
-const fmtTime = (t) => t ? new Date(t * 1000).toLocaleString() : "";
+const fmtTime = (t) => t ? new Date(t * 1000).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }) : "";
 const store = { get(k) { try { return localStorage.getItem(k); } catch { return null; } },
                 set(k, v) { try { localStorage.setItem(k, v); } catch {} } };
 
-let current = null, cy = null, graphData = null, sandboxMode = false;
+let current = null, cy = null;
 
 async function api(path, opts = {}) {
   const r = await fetch(path, { headers: { "Content-Type": "application/json" }, ...opts });
@@ -165,39 +243,39 @@ async function api(path, opts = {}) {
   return body;
 }
 
-function statusBadge(s) {
-  const cls = { open: "warn", resolved: "ok", failed: "bad", proposed: "acc", approved: "acc", executed: "warn",
-                verified: "ok", rejected: "", healthy: "ok", unhealthy: "bad", degraded: "warn" }[s] ?? "";
-  return el("span", { class: "badge " + cls }, s ?? "—");
+const ALARM = new Set(["open", "failed", "unhealthy"]), DONE = new Set(["resolved", "verified"]);
+function st(s) {
+  const cls = ALARM.has(s) ? "alarm" : DONE.has(s) ? "done" : (s === "unknown" || s === "rejected") ? "quiet" : "";
+  return el("span", { class: "st " + cls }, s ?? "—");
 }
 
 async function loadScenarios() {
   const data = await api("/api/scenarios");
-  sandboxMode = data.sandbox;
-  $("mode").textContent = data.sandbox ? "sandbox · ops_sandbox" : "live";
-  $("sandboxPanel").hidden = !data.sandbox;
-  $("scenarios").replaceChildren(...data.scenarios.map(s =>
-    el("button", { onclick: async (e) => {
-      e.target.disabled = true;
-      try { const r = await api(`/api/scenarios/${s.name}/inject`, { method: "POST" }); await refreshList(); await openIncident(r.incident_id); }
-      catch (err) { alert(err.message); } finally { e.target.disabled = false; }
-    } }, el("strong", {}, s.name.toUpperCase()), " ", s.title)));
+  $("mode").textContent = data.sandbox ? "Sandbox · ops_sandbox" : "Live";
+  $("sandboxNote").hidden = !data.sandbox;
+  if (!data.sandbox) return;
+  $("scenarios").replaceChildren(...data.scenarios.map((s, i) =>
+    el("button", { class: i === 0 ? "fill" : "", title: s.title, onclick: async (e) => {
+      const b = e.currentTarget; b.disabled = true;
+      try { const r = await api(`/api/scenarios/${s.name}/inject`, { method: "POST" }); await refreshList(); await openIncident(r.incident_id);
+            $("incident").scrollIntoView({ behavior: "smooth", block: "start" }); }
+      catch (err) { alert(err.message); } finally { b.disabled = false; }
+    } }, el("span", { class: "k" }, s.name.toUpperCase()), s.title)));
 }
 
 async function refreshList() {
   const rows = await api("/api/incidents");
   $("incidents").replaceChildren(...(rows.length ? rows.map(r =>
     el("li", { class: r.id === current ? "sel" : "", onclick: () => openIncident(r.id) },
-      el("div", { class: "row" }, el("span", { class: "id" }, r.id), statusBadge(r.status)),
-      el("div", { class: "muted", style: "font-size:12px" },
-         fmtTime(r.opened_at), r.top ? ` · top: ${r.top}` : "", r.ttr_seconds != null ? ` · ${r.ttr_seconds}s to resolve` : ""))
-  ) : [el("li", { class: "muted" }, "No incidents yet.")]));
+      el("div", { class: "row" }, el("span", { class: "id" }, r.id), st(r.status)),
+      el("div", { class: "meta" }, fmtTime(r.opened_at), r.top ? ` · ${r.top}` : "",
+         r.ttr_seconds != null ? ` · ${r.ttr_seconds}s` : ""))
+  ) : [el("li", { class: "meta" }, "None yet.")]));
 }
 
 async function openIncident(id) {
   current = id;
-  const inc = await api(`/api/incidents/${encodeURIComponent(id)}`);
-  render(inc);
+  render(await api(`/api/incidents/${encodeURIComponent(id)}`));
   refreshList();
 }
 
@@ -205,18 +283,19 @@ function render(inc) {
   const rep = inc.report;
   $("placeholder").hidden = true; $("incident").hidden = false;
   $("incId").textContent = inc.id;
-  $("incStatus").replaceChildren(statusBadge(inc.status));
+  $("incStatus").replaceChildren(st(inc.status));
   $("incTtr").textContent = inc.ttr_seconds != null ? `resolved in ${inc.ttr_seconds}s` : `opened ${fmtTime(inc.opened_at)}`;
-  if (!rep) { $("explanation").textContent = "Investigation running…"; return; }
+  if (!rep) { $("cause").textContent = "Investigating…"; $("explanation").textContent = ""; return; }
 
-  $("alerts").replaceChildren(...rep.alertnames.map(a => el("span", { class: "badge bad" }, a)),
-                              ...rep.alerting.map(r => el("span", { class: "badge" }, r)));
-  const multi = rep.multiple_causes;
-  $("multi").hidden = !multi;
-  if (multi) $("multi").textContent = `Multiple likely causes: ${rep.scorecard.slice(0, 2).map(r => `${r.rid} (${r.score})`).join(" and ")}. The scorecard ranks causes but does not split the alerts between them.`;
+  $("alerts").replaceChildren(el("span", { class: "a" }, `${rep.alertnames.join(", ")} on `),
+    ...rep.alerting.map((r, i) => el("span", { class: "a" }, el("b", {}, r), i < rep.alerting.length - 1 ? "," : "")));
+
+  $("cause").textContent = rep.top ?? "No candidate";
   $("explanation").textContent = rep.explanation;
-  $("explainedBy").textContent = `explanation: ${rep.explained_by}`;
-  $("recall").textContent = rep.recalled.length ? ` · memory: seen before in ${rep.recalled.map(r => r["i.id"]).join(", ")}` : "";
+  $("multi").hidden = !rep.multiple_causes;
+  if (rep.multiple_causes) $("multi").textContent = `Multiple likely causes: ${rep.scorecard.slice(0, 2).map(r => `${r.rid} (${r.score})`).join(" and ")}. The scorecard ranks causes but does not split the alerts between them.`;
+  $("explainedBy").textContent = `Explanation: ${rep.explained_by}`;
+  $("recall").textContent = rep.recalled.length ? ` · Seen before in ${rep.recalled.map(r => r["i.id"]).join(", ")}` : "";
 
   renderProposals(rep, inc.actions);
   renderScorecard(rep);
@@ -227,36 +306,34 @@ function render(inc) {
 function renderProposals(rep, acts) {
   const byId = Object.fromEntries(acts.map(a => [a.id, a]));
   $("proposals").replaceChildren(...rep.proposals.map(p => {
-    if (!p.action) return el("div", { class: "card" }, el("strong", {}, p.rid), el("p", { class: "muted" }, p.reason));
+    if (!p.action) return el("div", { class: "action" }, el("h3", {}, `No fix proposed for ${p.rid}`), el("p", { class: "meta" }, p.reason));
     const a = p.action, live = byId[a.id] || a, pr = a.params, kv = el("dl", { class: "kv" });
     const add = (k, v) => { if (v != null && v !== "") kv.append(el("dt", {}, k), el("dd", {}, v)); };
     if (a.kind === "restore_firewall_rule") {
-      add("rule", `${pr.rule.proto} ${pr.rule.port_from}-${pr.rule.port_to} from ${pr.rule.source} (was ${pr.rule.original_rule_id})`);
-      add("gains access", pr.gains_access);
-      add("verifies path", pr.verify_path ? pr.verify_path.join(" → ") : null);
-      add("rollback", pr.rollback);
+      add("Rule", `${pr.rule.proto} ${pr.rule.port_from}–${pr.rule.port_to} from ${pr.rule.source} (was ${pr.rule.original_rule_id})`);
+      add("Gains access", pr.gains_access);
+      add("Verifies", pr.verify_path ? pr.verify_path.join(" → ") : null);
+      add("Rollback", pr.rollback);
       if (pr.aws_cli) add("AWS CLI", el("code", {}, pr.aws_cli));
     } else {
-      add("command", el("code", {}, pr.command)); add("host", pr.host);
-      add("blast radius", (pr.blast_radius || []).join(", ") || "none"); add("rollback", pr.rollback);
+      add("Command", el("code", {}, pr.command)); add("Host", pr.host);
+      add("Blast radius", (pr.blast_radius || []).join(", ") || "none"); add("Rollback", pr.rollback);
     }
-    if (p.prefilled_from) add("memory", `same fix resolved ${p.prefilled_from.incident} in ${p.prefilled_from.ttr_seconds}s`);
-    if (live.approved_by) add("approved by", live.approved_by);
-    if (live.detail) add("result", live.detail);
-    const buttons = el("div", { class: "row" });
-    if (live.status === "proposed") {
-      buttons.append(
-        el("button", { class: "primary", onclick: (e) => act(e, a.id, "approve") }, "Approve & execute"),
-        el("button", { onclick: (e) => act(e, a.id, "reject") }, "Reject"));
-    }
-    return el("div", { class: "card" },
-      el("div", { class: "row" }, el("strong", {}, a.kind), el("span", { class: "muted" }, "on " + a.target_rid), statusBadge(live.status)),
+    if (p.prefilled_from) add("Memory", `the same fix resolved ${p.prefilled_from.incident} in ${p.prefilled_from.ttr_seconds}s`);
+    if (live.approved_by) add("Approved by", live.approved_by);
+    if (live.detail) add("Result", live.detail);
+    const buttons = el("div", { class: "pills" });
+    if (live.status === "proposed") buttons.append(
+      el("button", { class: "fill", onclick: (e) => act(e, a.id, "approve") }, "Approve and execute"),
+      el("button", { onclick: (e) => act(e, a.id, "reject") }, "Reject"));
+    return el("div", { class: "action" },
+      el("div", { class: "row" }, el("h3", {}, a.kind.replaceAll("_", " ")), el("span", { class: "meta" }, "on " + a.target_rid), st(live.status)),
       kv, buttons);
   }));
 }
 
 async function act(e, id, verb) {
-  e.target.disabled = true;
+  e.currentTarget.disabled = true;
   const actor = $("actor").value.trim(); store.set("rootgraph.actor", actor);
   try { await api(`/api/actions/${id}/${verb}`, { method: "POST", body: JSON.stringify({ actor }) }); }
   catch (err) { alert(err.message); }
@@ -264,80 +341,80 @@ async function act(e, id, verb) {
 }
 
 function renderScorecard(rep) {
-  const head = el("tr", {}, ...["#", "candidate", "score", "coverage", "probe", "broken path", "change", "memory", "hops", "evidence"].map(h => el("th", {}, h)));
-  const rows = rep.scorecard.map(r => el("tr", {},
-    el("td", {}, r.rank), el("td", {}, el("code", {}, r.rid)), el("td", { class: "num" }, el("strong", {}, r.score)),
-    el("td", { class: "num" }, `${r.explains.length}/${rep.alerting.length}`), el("td", {}, statusBadge(r.probe)),
-    el("td", {}, r.components.broken_path ? "yes" : ""), el("td", {}, r.components.change_in_window ? "yes" : ""),
-    el("td", {}, r.components.prior_incident_match ? "yes" : ""), el("td", { class: "num" }, r.components.min_hops),
-    el("td", { class: "muted", style: "font-size:12px" }, r.evidence.join("; "))));
+  const head = el("tr", {}, ...["#", "Candidate", "Score", "Coverage", "Probe", "Broken path", "Change", "Memory", "Hops"].map(h => el("th", {}, h)));
+  const rows = rep.scorecard.flatMap(r => [
+    el("tr", { class: "main" + (r.rank === 1 ? " top" : "") },
+      el("td", {}, r.rank), el("td", {}, el("code", {}, r.rid)), el("td", { class: "num" }, r.score),
+      el("td", { class: "num" }, `${r.explains.length}/${rep.alerting.length}`), el("td", {}, st(r.probe)),
+      el("td", {}, r.components.broken_path ? "yes" : ""), el("td", {}, r.components.change_in_window ? "yes" : ""),
+      el("td", {}, r.components.prior_incident_match ? "yes" : ""), el("td", { class: "num" }, r.components.min_hops)),
+    el("tr", { class: "ev" }, el("td", {}), el("td", { colspan: "8", class: "meta" }, r.evidence.join("; ")))]);
   $("scorecard").replaceChildren(head, ...rows);
 }
 
 function renderTrace(rep) {
-  const head = el("tr", {}, ...["#", "by", "tool", "args", "outcome", "ms"].map(h => el("th", {}, h)));
+  const head = el("tr", {}, ...["#", "By", "Tool", "Arguments", "Outcome", "ms"].map(h => el("th", {}, h)));
   const rows = rep.trace.map((t, i) => {
     const detail = el("details", {}, el("summary", {}, el("code", {}, t.tool)),
       t.cypher ? el("pre", {}, t.cypher) : null,
       t.tool === "probe" && t.rows[0]?.promql?.length ? el("pre", {}, t.rows[0].promql.join("\n")) : null,
       el("pre", {}, JSON.stringify(t.rows, null, 1)));
     return el("tr", {}, el("td", {}, i + 1),
-      el("td", {}, el("span", { class: "badge " + (t.by === "agent" ? "acc" : "") }, t.by === "agent" ? "agent-chosen" : "pipeline")),
+      el("td", {}, el("span", { class: "st " + (t.by === "agent" ? "done" : "") }, t.by === "agent" ? "agent-chosen" : "pipeline")),
       el("td", {}, detail), el("td", {}, el("code", {}, JSON.stringify(t.args))),
-      el("td", {}, el("span", { class: "badge " + (t.outcome === "not_in_graph" ? "warn" : t.outcome === "error" ? "bad" : "") }, t.outcome)),
+      el("td", {}, el("span", { class: "st " + (t.outcome === "error" ? "alarm" : t.outcome === "not_in_graph" ? "quiet" : "") }, t.outcome)),
       el("td", { class: "num" }, t.ms));
   });
   $("trace").replaceChildren(head, ...rows);
 }
 
 const COLUMN = { Service: 0, Compute: 1, Firewall: 2, Database: 3 };
-function kindOf(kinds) { return ["Service", "Compute", "Database", "Firewall", "Network", "Internet", "CidrBlock"].find(k => kinds.includes(k)) || "Resource"; }
+const kindOf = (kinds) => ["Service", "Compute", "Database", "Firewall", "Network", "Internet", "CidrBlock"].find(k => kinds.includes(k)) || "Resource";
+const C = { ink: "#17191c", paper: "#ffffff", hair: "#d9dadd", ash: "#979799", smoke: "#a3a6af", slate: "#777b86", peach: "#fbe1d1", sienna: "#5d2a1a" };
 
 async function renderGraph(rep) {
-  graphData = await api("/api/graph");
-  const css = getComputedStyle(document.documentElement);
-  const c = (v) => css.getPropertyValue(v).trim();
+  const data = await api("/api/graph");
   const counts = {};
-  const nodes = graphData.nodes.map(n => {
+  const nodes = data.nodes.map(n => {
     const kind = kindOf(n.kinds), col = COLUMN[kind] ?? 4;
     const y = (counts[col] = (counts[col] ?? -1) + 1);
-    return { data: { id: n.rid, label: n.name || n.rid, kind }, position: { x: col * 210, y: y * 70 } };
+    return { data: { id: n.rid, label: n.name || n.rid, kind }, position: { x: col * 210, y: y * 72 } };
   });
   const broken = new Set(rep.broken_paths.map(b => `${b.from}|${b.to}`));
-  const edges = graphData.edges.map((e, i) => ({ data: {
-    id: "e" + i, source: e.source, target: e.target, type: e.type,
-    cls: e.type === "ALLOWS_FROM" ? (e.active === false ? "removed" : "allow") : e.type === "DEPENDS_ON" ? (broken.has(`${e.source}|${e.target}`) ? "broken" : "dep") : "infra",
-    label: e.type === "ALLOWS_FROM" && e.active === false ? `removed ${e.port_from}` : "" } }));
-  const alerting = new Set(rep.alerting), top = rep.top;
-  const ranks = Object.fromEntries(rep.scorecard.map(r => [r.rid, r.rank]));
+  const edges = data.edges.map((e, i) => ({ data: {
+    id: "e" + i, source: e.source, target: e.target,
+    cls: e.type === "ALLOWS_FROM" ? (e.active === false ? "removed" : "allow")
+       : e.type === "DEPENDS_ON" ? (broken.has(`${e.source}|${e.target}`) ? "broken" : "dep") : "infra",
+    label: e.type === "ALLOWS_FROM" && e.active === false ? `removed :${e.port_from}` : "" } }));
+  const alerting = new Set(rep.alerting), ranks = Object.fromEntries(rep.scorecard.map(r => [r.rid, r.rank]));
   if (cy) cy.destroy();
   cy = cytoscape({
-    container: $("cy"), elements: [...nodes, ...edges], layout: { name: "preset", padding: 20 },
-    wheelSensitivity: 0.2,
+    container: $("cy"), elements: [...nodes, ...edges], layout: { name: "preset", padding: 24 }, wheelSensitivity: 0.2,
     style: [
-      { selector: "node", style: { "label": "data(label)", "font-size": 11, "color": c("--ink"), "text-valign": "bottom", "text-margin-y": 4,
-          "background-color": c("--chip"), "border-width": 1, "border-color": c("--line"), "width": 26, "height": 26 } },
+      { selector: "node", style: { "label": "data(label)", "font-family": "Inter, system-ui, sans-serif", "font-size": 11, "color": C.ink,
+          "text-valign": "bottom", "text-margin-y": 5, "background-color": C.paper, "border-width": 1, "border-color": C.hair, "width": 24, "height": 24 } },
       { selector: "node[kind = 'Firewall']", style: { "shape": "round-rectangle" } },
       { selector: "node[kind = 'Database']", style: { "shape": "barrel" } },
-      { selector: "node[kind = 'Compute']", style: { "shape": "rectangle" } },
-      { selector: "node.alerting", style: { "border-width": 4, "border-color": c("--warn") } },
-      { selector: "node.top", style: { "background-color": c("--bad") } },
-      { selector: "node.ranked", style: { "label": (n) => `${n.data("label")} #${ranks[n.id()]}` } },
-      { selector: "edge", style: { "width": 1.5, "curve-style": "bezier", "target-arrow-shape": "triangle", "arrow-scale": .8,
-          "line-color": c("--muted"), "target-arrow-color": c("--muted"), "opacity": .45, "font-size": 9, "label": "data(label)", "color": c("--bad") } },
-      { selector: "edge[cls = 'dep']", style: { "line-color": c("--accent"), "target-arrow-color": c("--accent"), "opacity": .9, "width": 2 } },
-      { selector: "edge[cls = 'allow']", style: { "line-color": c("--ok"), "target-arrow-color": c("--ok"), "opacity": .35, "line-style": "dotted" } },
-      { selector: "edge[cls = 'infra']", style: { "line-style": "dashed" } },
-      { selector: "edge[cls = 'broken'], edge[cls = 'removed']", style: { "line-color": c("--bad"), "target-arrow-color": c("--bad"), "opacity": 1, "width": 3 } },
+      { selector: "node[kind = 'Compute']", style: { "shape": "round-rectangle", "width": 30 } },
+      { selector: "node.alerting", style: { "border-width": 3, "border-color": C.ink } },
+      { selector: "node.top", style: { "background-color": C.peach, "border-width": 3, "border-color": C.sienna, "width": 32, "height": 32 } },
+      { selector: "node.ranked", style: { "label": (n) => `${n.data("label")}  #${ranks[n.id()]}` } },
+      { selector: "edge", style: { "width": 1.2, "curve-style": "bezier", "target-arrow-shape": "triangle", "arrow-scale": .7,
+          "line-color": C.ash, "target-arrow-color": C.ash, "opacity": .55, "font-size": 10, "label": "data(label)",
+          "color": C.sienna, "text-background-color": C.peach, "text-background-opacity": 1, "text-background-padding": 2 } },
+      { selector: "edge[cls = 'dep']", style: { "line-color": C.ink, "target-arrow-color": C.ink, "opacity": .85, "width": 1.6 } },
+      { selector: "edge[cls = 'infra']", style: { "line-style": "dashed", "opacity": .45 } },
+      { selector: "edge[cls = 'allow']", style: { "line-color": C.smoke, "target-arrow-color": C.smoke, "line-style": "dotted", "opacity": .5 } },
+      { selector: "edge[cls = 'broken'], edge[cls = 'removed']", style: { "line-color": C.sienna, "target-arrow-color": C.sienna, "opacity": 1, "width": 3 } },
       { selector: "edge[cls = 'removed']", style: { "line-style": "dashed" } },
     ],
   });
   cy.nodes().forEach(n => {
     if (alerting.has(n.id())) n.addClass("alerting");
-    if (n.id() === top) n.addClass("top");
+    if (n.id() === rep.top) n.addClass("top");
     if (ranks[n.id()]) n.addClass("ranked");
   });
-  cy.fit(undefined, 20);
+  cy.fit(undefined, 24);
 }
 
 $("resetBtn").addEventListener("click", async () => {
