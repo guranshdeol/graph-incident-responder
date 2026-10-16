@@ -56,7 +56,8 @@ def service_def(name, addr_of, image_build, ports_published):
     port, _, deps = SERVICES[name]
     dep_s = ",".join(f"{k}:{t}=" + (f"http://{addr_of(target)}/" if k == "http" else addr_of(target))
                      for k, t, target in deps)
-    d = {**image_build, "environment": {"SERVICE_RID": f"svc:{name}", "PORT": str(port), "DEPS": dep_s},
+    d = {**image_build, "container_name": name,  # the restart executor runs `docker start <name>`
+         "environment": {"SERVICE_RID": f"svc:{name}", "PORT": str(port), "DEPS": dep_s},
          "restart": "no"}  # no restart policy: a stopped service stays down (S3)
     if ports_published:
         d["ports"] = [f"0.0.0.0:{port}:{port}"]
@@ -157,7 +158,8 @@ def render_local(token):
 
 
 def render_aws(token):
-    st = json.loads((HERE / "aws/state.json").read_text())
+    from demo.aws import estate  # state.json path lives there (tests point it elsewhere)
+    st = json.loads(estate.STATE.read_text())
     import boto3  # only needed for the real ids/IPs
     s = boto3.Session(region_name=os.environ.get("AWS_REGION", "ap-south-1"))
     inst = {i["InstanceId"]: i for r in s.client("ec2").describe_instances(InstanceIds=[st["host1"], st["host2"]])["Reservations"]

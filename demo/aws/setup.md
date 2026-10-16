@@ -46,7 +46,13 @@ Within a minute you should see `sync ok ... 0 changes`. In FalkorDB Browser (SSH
 
 ## 4. Demo services + Prometheus on the hosts
 
-Covered by `demo/README` (demo stack). Each host runs its compose file through SSM or SSH; Alertmanager on host-1 posts to `https://172-232-86-149.sslip.io/hooks/alertmanager` with `WEBHOOK_TOKEN`.
+Wait ~3 minutes after `up` for the hosts' user data to install Docker, then:
+
+```bash
+AWS_PROFILE=rootgraph-admin uv run python -m demo.aws.deploy_hosts
+```
+
+It renders `demo/build/aws/` (real instance ids, host-2's private IP, the orders-db endpoint), ships each host's stack over SSM Run Command and runs `docker compose up -d --build` there (host-2 first). Alertmanager on host-1 posts to `https://172-232-86-149.sslip.io/live/hooks/alertmanager`. Note: SSM keeps command history, so the webhook token is visible to this account's admins.
 
 ## 5. Start the live API next to the public sandbox
 
@@ -61,7 +67,7 @@ The live UI is `https://172-232-86-149.sslip.io/live/` (graph `ops_live`). Paste
 ## 6. Record a real CloudTrail event (plan §6.3)
 
 ```bash
-AWS_PROFILE=rootgraph-admin uv run python demo/faults/s1_revoke_sg.py
+AWS_PROFILE=rootgraph-admin uv run python -m demo.faults.s1_revoke_sg
 ```
 
 Copy the SQS message body the ingester logs into `ingest/fixtures/` to replace the hand-written sample.
@@ -73,3 +79,23 @@ AWS_PROFILE=rootgraph-admin uv run python -m demo.aws.estate down
 ```
 
 Then delete the admin key you used in step 0, and remove the `*_AWS_*` lines from `.env`.
+
+## Faults for the demo
+
+```bash
+AWS_PROFILE=rootgraph-admin uv run python -m demo.faults.s1_revoke_sg
+```
+
+```bash
+AWS_PROFILE=rootgraph-admin uv run python -m demo.faults.s2_cpu_hog
+```
+
+```bash
+AWS_PROFILE=rootgraph-admin uv run python -m demo.faults.s3_stop_payments
+```
+
+If a fix doesn't happen, put rule A back by hand:
+
+```bash
+AWS_PROFILE=rootgraph-admin uv run python -m demo.faults.restore_all
+```

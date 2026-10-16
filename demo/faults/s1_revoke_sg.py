@@ -1,5 +1,5 @@
 """S1 fault: revoke rule A (host-1 -> orders-db:5432) with YOUR credentials (you play the human
-who makes the bad change). Run: AWS_PROFILE=rootgraph-admin uv run python demo/faults/s1_revoke_sg.py"""
+who makes the bad change). Run: AWS_PROFILE=rootgraph-admin uv run python -m demo.faults.s1_revoke_sg"""
 
 import json
 import os

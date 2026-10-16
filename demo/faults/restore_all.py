@@ -1,5 +1,5 @@
 """Put the estate back by hand if the agent didn't (re-adds rule A if missing).
-Run: AWS_PROFILE=rootgraph-admin uv run python demo/faults/restore_all.py"""
+Run: AWS_PROFILE=rootgraph-admin uv run python -m demo.faults.restore_all"""
 
 import json
 import os

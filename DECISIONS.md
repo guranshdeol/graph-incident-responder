@@ -85,3 +85,9 @@ One line per non-obvious choice (plan §15.4). Newest at the bottom.
 
 - **Inject returns at once**; the investigation (with the ~25 s LLM step) runs in a background task and the UI polls the incident, showing "Investigating…". One injection at a time and at most one per `INJECT_MIN_INTERVAL` (15 s) → 429, so the public sandbox can't burn the free LLM quota.
 - **Live and sandbox run side by side:** `api-live` (compose profile `aws`, `ops_live`, `SANDBOX_MODE=false`, own hooks dir, `PROMETHEUS_URL_LIVE`) is served at `/live/` by Caddy; `/` stays the public sandbox. The UI uses relative API paths so one page serves both, and shows an operator-token field in live mode (sent as Bearer on every call). AWS Alertmanager posts to `/live/hooks/alertmanager`.
+
+## Host deploy + fault scripts over SSM (Sat 17 Oct 2026)
+
+- **No SSH to the demo hosts:** `demo/aws/deploy_hosts.py` renders the stacks, ships each host's folder as an inline gzipped tar in one SSM Run Command (< 48 KB), unpacks into `/opt/rootgraph-demo` and runs `docker compose up -d --build`, host-2 first. S2 (`timeout 300` busy loop on every core of host-2) and S3 (`docker stop payments`) are SSM commands too; run them with `python -m demo.faults.<name>`.
+- **Fixed container names** (`container_name: payments`, …) so `restart_service` (`docker start payments`), the S3 script and the local stack all target the same name. Found while writing the deploy tests: the executor would have targeted `payments` while compose named it `rootgraph-demo-payments-1`.
+- **Secrets in the estate script:** `state.json` holds the RDS password and the IAM secret keys, so it is now created 600 (it was 644), and `up` no longer prints the password or keys.

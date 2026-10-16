@@ -62,6 +62,7 @@ def test_estate_up_writes_state_and_credentials(aws):
     for prefix in ("DISCOVERY", "INGESTER", "EXECUTOR"):
         assert f"{prefix}_AWS_ACCESS_KEY_ID=" in creds
     assert "CHANGES_QUEUE_URL=" in creds and oct((aws["tmp"] / "credentials.env").stat().st_mode)[-3:] == "600"
+    assert oct((aws["tmp"] / "state.json").stat().st_mode)[-3:] == "600"  # holds the db password + IAM keys
     doc = aws["session"].client("iam").get_user_policy(UserName="rootgraph-executor",
                                                        PolicyName="rootgraph-executor")["PolicyDocument"]
     policy = json.loads(doc) if isinstance(doc, str) else doc
@@ -188,3 +189,51 @@ def test_estate_down_removes_everything(aws):
     assert not (aws["tmp"] / "state.json").exists() and not (aws["tmp"] / "credentials.env").exists()
     iam_users = [u["UserName"] for u in aws["session"].client("iam").list_users()["Users"]]
     assert not any(u.startswith("rootgraph-") for u in iam_users)
+
+
+def test_deploy_hosts_ships_rendered_stacks_over_ssm(aws, monkeypatch, tmp_path):
+    import base64
+    import io
+    import re
+    import tarfile
+
+    import yaml
+
+    from demo import render
+    from demo.aws import deploy_hosts
+
+    monkeypatch.setattr(render, "BUILD", tmp_path / "build")
+    monkeypatch.setenv("WEBHOOK_TOKEN", "test-token")
+    results = deploy_hosts.deploy(aws["session"], wait=False)
+    assert set(results) == {"host1", "host2"}
+
+    ssm = aws["session"].client("ssm")
+    # keyed by comment: moto lists every instance under each command
+    sent = {c["Comment"]: c["Parameters"]["commands"] for c in ssm.list_commands()["Commands"]}
+    st = aws["state"]
+    files = {}
+    for host in ("host1", "host2"):
+        cmds = sent[f"rootgraph deploy {host}"]
+        payload = re.search(r"echo '([A-Za-z0-9+/=]+)' \| base64 -d", " ".join(cmds)).group(1)
+        with tarfile.open(fileobj=io.BytesIO(base64.b64decode(payload)), mode="r:gz") as tar:
+            files[host] = {m.name: tar.extractfile(m).read().decode() for m in tar.getmembers() if m.isfile()}
+        assert any("docker compose up -d --build" in c for c in cmds)
+    assert {"compose.yml", "prometheus.yml", "alertmanager.yml", "rules.yml", "service/app.py"} <= set(files["host1"])
+    assert "alertmanager.yml" not in files["host2"] and "prometheus.yml" not in files["host2"]
+    am = yaml.safe_load(files["host1"]["alertmanager.yml"])["receivers"][0]["webhook_configs"][0]
+    assert am["url"].endswith("/live/hooks/alertmanager") and am["http_config"]["authorization"]["credentials"] == "test-token"
+    h1 = yaml.safe_load(files["host1"]["compose.yml"])["services"]
+    assert h1["payments"]["container_name"] == "payments"  # what restart_service and the S3 script target
+    prom = yaml.safe_load(files["host1"]["prometheus.yml"])
+    node_rids = {c["labels"]["rid"] for c in prom["scrape_configs"][1]["static_configs"]}
+    assert node_rids == {st["host1"], st["host2"]}  # real instance ids = graph rids
+
+
+def test_fault_scripts_send_the_right_commands(aws):
+    from demo.aws import ssm as ssm_mod
+    from demo.faults import s2_cpu_hog, s3_stop_payments
+    ssm = aws["session"].client("ssm")
+    ssm_mod.run(ssm, aws["state"]["host2"], [s2_cpu_hog.HOG], "S2", wait=False)
+    ssm_mod.run(ssm, aws["state"]["host1"], [f"docker stop {s3_stop_payments.CONTAINER}"], "S3", wait=False)
+    sent = {c["Comment"]: c["Parameters"]["commands"][0] for c in ssm.list_commands()["Commands"]}
+    assert "timeout 300" in sent["S2"] and sent["S3"] == "docker stop payments"

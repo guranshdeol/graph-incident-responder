@@ -32,6 +32,7 @@ CREDS = HERE / "credentials.env"
 PATTERN = json.loads((HERE / "eventbridge-pattern.json").read_text())
 REGION = os.environ.get("AWS_REGION", "ap-south-1")
 TAG = {"Key": "rootgraph", "Value": "demo"}
+SECRET_KEYS = {"db_password", "users"}  # never printed
 AMI_PARAM = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64"
 COMPOSE_VERSION = "v2.29.7"
 
@@ -59,7 +60,11 @@ def load_state() -> dict:
 
 
 def save_state(st: dict) -> None:
-    STATE.write_text(json.dumps(st, indent=2))
+    # holds the RDS password and the IAM secret keys: owner-only, written that way from the start
+    fd = os.open(STATE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as f:
+        f.write(json.dumps(st, indent=2))
+    STATE.chmod(0o600)
 
 
 def step(st: dict, key: str, fn):
@@ -67,7 +72,8 @@ def step(st: dict, key: str, fn):
     if key not in st:
         st[key] = fn()
         save_state(st)
-        print(f"  created {key}: {st[key] if not isinstance(st[key], dict) else '...'}")
+        shown = "(secret, see credentials.env)" if key in SECRET_KEYS else (st[key] if not isinstance(st[key], dict) else "...")
+        print(f"  created {key}: {shown}")
     return st[key]
 
 

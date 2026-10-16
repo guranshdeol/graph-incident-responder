@@ -16,8 +16,8 @@ docker compose -f demo/build/local/compose.yml up -d --build
 ```
 
 The API reaches this Prometheus as `http://demo-prometheus:9090` (`PROMETHEUS_URL` in `.env`).
-Try S3 for real: `docker stop rootgraph-demo-payments-1`, wait ~40 s, open the UI. Bring it back
-with `docker start rootgraph-demo-payments-1`. Stop the stack with `docker compose -f demo/build/local/compose.yml down`.
+Try S3 for real: `docker stop payments`, wait ~40 s, open the UI. Bring it back
+with `docker start payments`. Stop the stack with `docker compose -f demo/build/local/compose.yml down`.
 
 Recorded payloads from such a run are in `demo/replay/recorded/`.
 
