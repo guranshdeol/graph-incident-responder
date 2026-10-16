@@ -12,6 +12,7 @@ Executors:
 """
 
 import json
+import re
 import time
 import uuid
 
@@ -29,6 +30,23 @@ CATALOGUE = {
 
 class PreconditionFailed(Exception):
     pass
+
+
+def ip_permission(spec: dict) -> dict:
+    """The exact rule to re-add, as boto3 IpPermissions. Compute (/32) sources aren't supported in v1."""
+    src = spec["source"]
+    perm = {"IpProtocol": "-1" if spec["proto"] == "all" else spec["proto"]}
+    if spec["proto"] != "all":
+        perm |= {"FromPort": int(spec["port_from"]), "ToPort": int(spec["port_to"])}
+    if src.startswith("sg-"):
+        perm["UserIdGroupPairs"] = [{"GroupId": src, "Description": "restored by rootgraph"}]
+    elif src == "internet":
+        perm["IpRanges"] = [{"CidrIp": "0.0.0.0/0", "Description": "restored by rootgraph"}]
+    elif src.startswith("cidr:"):
+        perm["IpRanges"] = [{"CidrIp": src.removeprefix("cidr:"), "Description": "restored by rootgraph"}]
+    else:
+        raise PreconditionFailed(f"restoring a rule whose source is {src} is not supported yet")
+    return perm
 
 
 def _aws_cli(fw: str, spec: dict) -> str | None:
@@ -137,6 +155,32 @@ class SandboxExecutor:
                                        "actor": EXECUTOR_ACTOR, "at": now, "by_agent": True,
                                        "request_json": json.dumps(p), "rids": rids})
         return f"sandbox: {event} on {', '.join(rids)}"
+
+
+SERVICE_NAME = re.compile(r"^[a-z0-9][a-z0-9_-]{0,62}$")
+
+
+class AwsExecutor:
+    """Live effects with the scoped executor principal (§7.7): ec2:AuthorizeSecurityGroupIngress
+    on the demo SG, ssm:SendCommand on instances tagged rootgraph=demo. CloudTrail records
+    these under the executor's ARN, so the ingester marks them by_agent."""
+
+    def __init__(self, ec2, ssm):
+        self.ec2, self.ssm = ec2, ssm
+
+    def run(self, g, action: dict, now: int) -> str:
+        p = action["params"]
+        if action["kind"] == "restore_firewall_rule":
+            resp = self.ec2.authorize_security_group_ingress(GroupId=p["firewall"], IpPermissions=[ip_permission(p["rule"])])
+            ids = [r.get("SecurityGroupRuleId") for r in resp.get("SecurityGroupRules", [])]
+            return f"authorized on {p['firewall']}: {', '.join(i for i in ids if i) or 'ok'}"
+        name = p["service"].removeprefix("svc:")
+        if not SERVICE_NAME.match(name) or not p.get("host"):
+            raise PreconditionFailed(f"refusing to build a command for service {p['service']!r} on {p.get('host')!r}")
+        resp = self.ssm.send_command(InstanceIds=[p["host"]], DocumentName="AWS-RunShellScript",
+                                     Parameters={"commands": [f"docker start {name}"]},
+                                     Comment=f"rootgraph {action['id']}"[:100])
+        return f"ssm command {resp['Command']['CommandId']} on {p['host']}: docker start {name}"
 
 
 def execute(g, action_id: str, executor, now: int) -> dict:

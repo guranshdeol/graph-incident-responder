@@ -15,7 +15,8 @@
 
 SANDBOX_MODE=true (public demo on ops_sandbox): sandbox controls and approval are open,
 and executing an action only writes to the graph. Otherwise those endpoints need
-`Authorization: Bearer $ADMIN_TOKEN`, and live executors (P2) are not wired yet.
+`Authorization: Bearer $ADMIN_TOKEN`, approval runs agent.actions.AwsExecutor, and
+each new incident gets a discovery resync before it is investigated.
 """
 
 import hmac
@@ -86,7 +87,33 @@ def _probe_source_for(report: dict | None, after_fix: bool = False):
     return FixtureProbe({}), None  # no probes yet: every probe reports "unknown"
 
 
+_live_clients: dict = {}
+
+
+def _live(name: str):
+    """Lazily built boto3 clients for live mode, each with its own principal (ingest/worker.py)."""
+    if name not in _live_clients:
+        from ingest.worker import session  # boto3 only needed in live mode
+        prefix, service = {"executor_ec2": ("EXECUTOR", "ec2"), "executor_ssm": ("EXECUTOR", "ssm"),
+                           "discovery_ec2": ("DISCOVERY", "ec2"), "discovery_rds": ("DISCOVERY", "rds")}[name]
+        _live_clients[name] = session(prefix).client(service)
+    return _live_clients[name]
+
+
+def _resync_live() -> None:
+    """§7.3 step 1: re-discover before investigating so the graph-diff Change is there even if CloudTrail lags."""
+    if SANDBOX_MODE:
+        return
+    from ingest import discovery_aws
+    try:
+        out = discovery_aws.resync(g(), _live("discovery_ec2"), _live("discovery_rds"))
+        log.info("resync: %d changes %s", len(out["changes"]), out["changes"])
+    except Exception:
+        log.exception("resync before investigation failed; investigating the graph as it is")
+
+
 def _investigate(incident_id: str, probe_source, scenario: dict | None = None) -> dict:
+    _resync_live()
     report = Investigator(g(), probe_source, now=lambda: now()).run(incident_id)
     if scenario:
         report["scenario"] = scenario
@@ -210,13 +237,53 @@ def _actor(body: dict | None) -> str:
     return actor or "anonymous"
 
 
+def _finish(graph, action: dict, t: int, verify_timeout: int, sleep=time.sleep) -> dict:
+    """After execution: once every proposed fix ran, verify them all, then write memory or fail."""
+    incident = get_incident(action["incident_id"])
+    pending = [a for a in incident["actions"] if a["status"] in ("proposed", "approved")]
+    if pending:  # multiple causes: verify once every proposed fix has run
+        return {"verified": None, "detail": f"waiting for {len(pending)} other proposed action(s)"}
+
+    report = incident["report"] or {}
+    probes, sc = _probe_source_for(report, after_fix=True)
+    if sc:
+        sc.recover(now=t)
+    executed = [a for a in incident["actions"] if a["status"] == "executed"]
+    results = {a["id"]: actions.verify(graph, Tools(graph), probes, a["id"], now=lambda: now(),
+                                       timeout=verify_timeout, sleep=sleep) for a in executed}
+    out = results.get(action["id"], {"verified": False, "detail": "not executed"})
+    if executed and all(r["verified"] for r in results.values()):
+        tools = Tools(graph)
+        for a in executed:
+            done = actions.get(graph, a["id"])
+            memory.close_incident(graph, action["incident_id"], done["target_rid"], a["id"],
+                                  report.get("root_change_id") if done["target_rid"] == report.get("top") else None,
+                                  report.get("explanation", ""), now=now())
+        try:
+            memory.record_finding(graph, tools, action["incident_id"], report.get("explanation", ""),
+                                  [actions.get(graph, a["id"])["target_rid"] for a in executed], now=now())
+        except memory.InvalidFinding as exc:
+            log.warning("finding not recorded: %s", exc)
+    else:
+        memory.fail_incident(graph, action["incident_id"])
+    return out
+
+
+def _finish_live_bg(action: dict, t: int):
+    """Live: real alerts take time to resolve, so verification polls (5s x up to 120s) off the request."""
+    graph = g()
+    try:
+        out = _finish(graph, action, t, verify_timeout=120)
+        log.info("verification of %s: %s", action["id"], out)
+    except Exception:
+        log.exception("verification of %s failed", action["id"])
+
+
 @app.post("/api/actions/{action_id}/approve")
-def approve(action_id: str, body: dict | None = Body(default=None),
+def approve(action_id: str, background: BackgroundTasks, body: dict | None = Body(default=None),
             authorization: str | None = Header(default=None)):
-    """Human approval -> execute -> (sandbox: world recovers) -> verify -> memory."""
+    """The human approval gate -> execute -> verify -> memory."""
     _require_operator(authorization)
-    if not SANDBOX_MODE:
-        raise HTTPException(status_code=501, detail="live executors are not wired yet (P2)")
     with LOCK:
         graph, t = g(), now()
         action = actions.get(graph, action_id)
@@ -224,36 +291,18 @@ def approve(action_id: str, body: dict | None = Body(default=None),
             raise HTTPException(status_code=404, detail="no such action")
         if not actions.approve(graph, action_id, actor=_actor(body), now=t):
             raise HTTPException(status_code=409, detail=f"action is {action['status']}, not proposed")
-        actions.execute(graph, action_id, actions.SandboxExecutor(), now=t)
-
-        incident = get_incident(action["incident_id"])
-        pending = [a for a in incident["actions"] if a["status"] in ("proposed", "approved")]
-        if pending:  # multiple causes: verify once every proposed fix has run
-            out = {"verified": None, "detail": f"waiting for {len(pending)} other proposed action(s)"}
-            return {"action": actions.get(graph, action_id), "verify": out}
-
-        report = incident["report"] or {}
-        probes, sc = _probe_source_for(report, after_fix=True)
-        if sc:
-            sc.recover(now=t)
-        executed = [a for a in incident["actions"] if a["status"] == "executed"]
-        results = {a["id"]: actions.verify(graph, Tools(graph), probes, a["id"], now=lambda: now(), timeout=0)
-                   for a in executed}
-        out = results.get(action_id, {"verified": False, "detail": "not executed"})
-        if executed and all(r["verified"] for r in results.values()):
-            tools = Tools(graph)
-            for a in executed:
-                done = actions.get(graph, a["id"])
-                memory.close_incident(graph, action["incident_id"], done["target_rid"], a["id"],
-                                      report.get("root_change_id") if done["target_rid"] == report.get("top") else None,
-                                      report.get("explanation", ""), now=t)
-            try:
-                memory.record_finding(graph, tools, action["incident_id"], report.get("explanation", ""),
-                                      [actions.get(graph, a["id"])["target_rid"] for a in executed], now=t)
-            except memory.InvalidFinding as exc:
-                log.warning("finding not recorded: %s", exc)
+        executor = (actions.SandboxExecutor() if SANDBOX_MODE
+                    else actions.AwsExecutor(_live("executor_ec2"), _live("executor_ssm")))
+        try:
+            actions.execute(graph, action_id, executor, now=t)
+        except Exception as exc:
+            log.exception("execution of %s failed", action_id)
+            raise HTTPException(status_code=502, detail=f"execution failed: {exc}")
+        if SANDBOX_MODE:
+            out = _finish(graph, action, t, verify_timeout=0)
         else:
-            memory.fail_incident(graph, action["incident_id"])
+            background.add_task(_finish_live_bg, action, t)
+            out = {"verified": None, "detail": "executed; verifying in the background (up to 120s)"}
     return {"action": actions.get(graph, action_id), "verify": out}
 
 

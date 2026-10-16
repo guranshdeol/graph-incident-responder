@@ -1,0 +1,11 @@
+{
+  "source": ["aws.ec2", "aws.rds"],
+  "detail-type": ["AWS API Call via CloudTrail"],
+  "detail": {
+    "eventName": [
+      "RevokeSecurityGroupIngress", "AuthorizeSecurityGroupIngress", "ModifySecurityGroupRules",
+      "StopInstances", "StartInstances", "RebootInstances", "TerminateInstances", "ModifyInstanceAttribute",
+      "ModifyDBInstance", "RebootDBInstance", "StopDBInstance"
+    ]
+  }
+}

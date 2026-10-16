@@ -119,7 +119,7 @@ CREATE INDEX FOR (x:Action) ON (x.id);
 
 # Cypher catalogue
 
-Every query file in `graph/queries/`, copied verbatim. The leading `//` comment lines are removed; nothing else is changed. Files are listed in name order (`q1`…`q20`, then `w1`, `w1b`, `w2`…`w11`). The `$name` placeholders are parameters bound by the caller.
+Every query file in `graph/queries/`, copied verbatim. The leading `//` comment lines are removed; nothing else is changed. Files are listed in name order (`q1`…`q20`, then `w1`, `w1b`, `w2`…`w22`). The `$name` placeholders are parameters bound by the caller.
 
 ## Read queries (agent tools)
 
@@ -619,6 +619,152 @@ Params: $id, $report, $status
 MATCH (i:Incident {id: $id})
 SET i.report = coalesce($report, i.report), i.status = coalesce($status, i.status)
 RETURN i.id AS id, i.status AS status
+```
+
+### w12_upsert_network
+
+Upsert a VPC or subnet; a subnet is linked IN its VPC.
+
+Params: $rid, $name, $kind, $cidr, $parent_rid (null for a VPC), $sync_ts
+
+```cypher
+MERGE (n:Resource:Network {rid: $rid})
+SET n.name = $name, n.kind = $kind, n.cidr = $cidr, n.source = 'aws_api', n.last_seen = $sync_ts, n.state = 'present'
+WITH n
+OPTIONAL MATCH (p:Network {rid: $parent_rid})
+FOREACH (_ IN CASE WHEN p IS NULL THEN [] ELSE [1] END |
+  MERGE (n)-[e:IN]->(p) SET e.source = 'aws_api', e.last_seen = $sync_ts)
+```
+
+### w13_upsert_compute
+
+Upsert an EC2 instance, IN its subnet.
+
+Params: $rid, $name, $private_ip, $public_ip, $state, $instance_type, $subnet_rid, $sync_ts
+
+```cypher
+MERGE (c:Resource:Compute {rid: $rid})
+SET c.name = $name, c.private_ip = $private_ip, c.public_ip = $public_ip, c.state = $state,
+    c.instance_type = $instance_type, c.source = 'aws_api', c.last_seen = $sync_ts
+WITH c
+OPTIONAL MATCH (s:Network {rid: $subnet_rid})
+FOREACH (_ IN CASE WHEN s IS NULL THEN [] ELSE [1] END |
+  MERGE (c)-[e:IN]->(s) SET e.source = 'aws_api', e.last_seen = $sync_ts)
+```
+
+### w14_upsert_database
+
+Upsert an RDS instance, IN each subnet of its subnet group.
+
+Params: $rid, $name, $engine, $endpoint, $port, $status, $subnet_rids, $sync_ts
+
+```cypher
+MERGE (d:Resource:Database {rid: $rid})
+SET d.name = $name, d.engine = $engine, d.endpoint = $endpoint, d.port = $port, d.status = $status,
+    d.source = 'aws_api', d.last_seen = $sync_ts, d.state = 'present'
+WITH d
+UNWIND (CASE WHEN size($subnet_rids) = 0 THEN [null] ELSE $subnet_rids END) AS srid
+OPTIONAL MATCH (s:Network {rid: srid})
+FOREACH (_ IN CASE WHEN s IS NULL THEN [] ELSE [1] END |
+  MERGE (d)-[e:IN]->(s) SET e.source = 'aws_api', e.last_seen = $sync_ts)
+```
+
+### w15_upsert_firewall
+
+Upsert a security group.
+
+Params: $rid, $name, $sync_ts
+
+```cypher
+MERGE (f:Resource:Firewall {rid: $rid})
+SET f.name = $name, f.kind = 'security_group', f.source = 'aws_api', f.last_seen = $sync_ts, f.state = 'present'
+```
+
+### w16_protects
+
+A security group PROTECTS an instance or database.
+
+Params: $fw, $target, $sync_ts
+
+```cypher
+MATCH (f:Firewall {rid: $fw}), (t:Resource {rid: $target})
+MERGE (f)-[e:PROTECTS]->(t)
+SET e.source = 'aws_api', e.last_seen = $sync_ts
+```
+
+### w17_upsert_cidr
+
+Upsert a CIDR traffic source (not a known host /32, not 0.0.0.0/0).
+
+Params: $rid, $cidr, $sync_ts
+
+```cypher
+MERGE (c:Resource:CidrBlock {rid: $rid})
+SET c.name = $cidr, c.cidr = $cidr, c.source = 'aws_api', c.last_seen = $sync_ts
+```
+
+### w18_upsert_internet
+
+The 0.0.0.0/0 traffic source.
+
+Params: $sync_ts
+
+```cypher
+MERGE (i:Resource:Internet {rid: 'internet'})
+SET i.name = 'internet', i.cidr = '0.0.0.0/0', i.source = 'aws_api', i.last_seen = $sync_ts
+```
+
+### w19_upsert_service
+
+Upsert a declared service (services.yaml) and where it runs.
+
+Params: $rid, $name, $port, $host_rid, $sync_ts
+
+```cypher
+MERGE (s:Resource:Service {rid: $rid})
+SET s.name = $name, s.port = $port, s.source = 'declared', s.last_seen = $sync_ts
+WITH s
+OPTIONAL MATCH (h:Compute {rid: $host_rid})
+FOREACH (_ IN CASE WHEN h IS NULL THEN [] ELSE [1] END |
+  MERGE (s)-[e:RUNS_ON]->(h) SET e.weight = 1, e.source = 'declared', e.last_seen = $sync_ts)
+```
+
+### w20_depends_on
+
+A declared dependency (services.yaml).
+
+Params: $from, $to, $kind, $port, $sync_ts
+
+```cypher
+MATCH (a:Service {rid: $from}), (b:Resource {rid: $to})
+MERGE (a)-[d:DEPENDS_ON]->(b)
+SET d.kind = $kind, d.port = $port, d.weight = 1, d.source = 'declared', d.last_seen = $sync_ts
+RETURN b.rid AS target
+```
+
+### w21_mark_missing
+
+Discovered resources not seen in this sync are marked missing, never deleted (§6.1).
+
+Params: $sync_ts
+
+```cypher
+MATCH (r:Resource)
+WHERE r.source = 'aws_api' AND r.last_seen < $sync_ts AND coalesce(r.state, '') <> 'missing'
+  AND (r:Compute OR r:Database OR r:Firewall OR r:Network)
+SET r.state = 'missing'
+RETURN r.rid AS rid
+```
+
+### w22_change_unlinked
+
+Remember rids a CloudTrail Change named that the graph doesn't have yet (§6.3).
+
+Params: $event_id, $rids
+
+```cypher
+MATCH (ch:Change {event_id: $event_id})
+SET ch.unlinked_rids = $rids
 ```
 
 # Known limitations

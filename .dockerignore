@@ -3,3 +3,5 @@
 .venv
 .pytest_cache
 **/__pycache__
+demo/aws/credentials.env
+demo/aws/state.json

@@ -1,0 +1,29 @@
+# Declared service catalogue (§6.4). host = EC2 Name tag (or instance id).
+# Dependencies on AWS resources use their rid (e.g. rds:orders-db).
+services:
+  web:
+    host: host-1
+    port: 8080
+    depends_on:
+      - {to: checkout, kind: http, port: 8081}
+      - {to: orders, kind: http, port: 8083}
+  checkout:
+    host: host-1
+    port: 8081
+    depends_on:
+      - {to: payments, kind: http, port: 8082}
+  payments:
+    host: host-1
+    port: 8082
+    depends_on:
+      - {to: "rds:orders-db", kind: db, port: 5432}
+  orders:
+    host: host-2
+    port: 8083
+    depends_on:
+      - {to: "rds:orders-db", kind: db, port: 5432}
+  reports:
+    host: host-2
+    port: 8084
+    depends_on:
+      - {to: "rds:orders-db", kind: db, port: 5432}

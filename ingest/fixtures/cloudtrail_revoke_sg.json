@@ -1,0 +1,31 @@
+{
+  "_note": "SYNTHETIC, hand-written from the documented EventBridge/CloudTrail shape. Replace with a recorded event (plan §6.3). GROUP_ID and RULE_ID are filled in by the tests.",
+  "version": "0",
+  "id": "3b6f9c1e-0d1a-4c5e-9b7a-000000000001",
+  "detail-type": "AWS API Call via CloudTrail",
+  "source": "aws.ec2",
+  "account": "123456789012",
+  "time": "2026-10-17T10:00:05Z",
+  "region": "ap-south-1",
+  "resources": [],
+  "detail": {
+    "eventVersion": "1.09",
+    "userIdentity": {"type": "IAMUser", "principalId": "AIDAEXAMPLE", "arn": "arn:aws:iam::123456789012:user/alice",
+                     "accountId": "123456789012", "userName": "alice"},
+    "eventTime": "2026-10-17T10:00:00Z",
+    "eventSource": "ec2.amazonaws.com",
+    "eventName": "RevokeSecurityGroupIngress",
+    "awsRegion": "ap-south-1",
+    "sourceIPAddress": "203.0.113.7",
+    "userAgent": "aws-cli/2.17.0",
+    "requestParameters": {"groupId": "GROUP_ID", "securityGroupRuleIds": {"items": [{"securityGroupRuleId": "RULE_ID"}]}},
+    "responseElements": {"requestId": "c0ffee00-0000-0000-0000-000000000001", "_return": true},
+    "requestID": "c0ffee00-0000-0000-0000-000000000001",
+    "eventID": "7d1c2a3b-0000-4000-8000-000000000001",
+    "readOnly": false,
+    "eventType": "AwsApiCall",
+    "managementEvent": true,
+    "recipientAccountId": "123456789012",
+    "eventCategory": "Management"
+  }
+}

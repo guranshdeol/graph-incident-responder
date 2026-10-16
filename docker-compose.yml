@@ -37,6 +37,36 @@ services:
       falkordb:
         condition: service_healthy
 
+  # Live AWS workers: off until the estate exists. Start with
+  #   docker compose --profile aws up -d discovery ingester
+  discovery:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    profiles: ["aws"]
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      FALKORDB_HOST: falkordb
+    command: ["python", "-m", "ingest.worker", "discovery"]
+    depends_on:
+      falkordb:
+        condition: service_healthy
+
+  ingester:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    profiles: ["aws"]
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      FALKORDB_HOST: falkordb
+    command: ["python", "-m", "ingest.worker", "ingester"]
+    depends_on:
+      falkordb:
+        condition: service_healthy
+
   caddy:
     image: caddy:2
     restart: unless-stopped
