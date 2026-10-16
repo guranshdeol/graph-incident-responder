@@ -23,7 +23,7 @@ import time
 import urllib.parse
 import urllib.request
 
-from agent.tools import ANSWERED, NOT_IN_GRAPH, UNKNOWN, _envelope
+from agent.tools import ANSWERED, ERROR, NOT_IN_GRAPH, UNKNOWN, _envelope
 
 ERROR_RATE_OK = 0.05
 P95_OK_SECONDS = 1.0
@@ -124,8 +124,13 @@ def probe(tools, source, rid: str) -> dict:
     canon, kinds = resolved["rows"][0]["rid"], resolved["rows"][0]["kinds"]
     kind = kind_of(kinds)
     t0 = time.perf_counter()
-    m = source.metrics(canon, kind)
-    ms = int((time.perf_counter() - t0) * 1000)
     promql = [q.format(rid=_label_value(canon)) for q in PROMQL.get(kind or "", {}).values()]
+    try:
+        m = source.metrics(canon, kind)
+    except Exception as exc:  # Prometheus unreachable: say so, never break the investigation
+        ms = int((time.perf_counter() - t0) * 1000)
+        row = {"rid": canon, "kind": kind, "state": "unknown", "metrics": {}, "promql": promql, "error": str(exc)}
+        return _envelope("probe", args, ERROR, rows=[row], ms=ms)
+    ms = int((time.perf_counter() - t0) * 1000)
     row = {"rid": canon, "kind": kind, "state": classify(kind, m), "metrics": m or {}, "promql": promql}
     return _envelope("probe", args, ANSWERED if m else NOT_IN_GRAPH, rows=[row], ms=ms)

@@ -1,0 +1,62 @@
+{
+  "receiver": "rootgraph",
+  "status": "firing",
+  "alerts": [
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "ServiceDown",
+        "env": "local",
+        "instance": "payments:8082",
+        "job": "services",
+        "rid": "svc:payments",
+        "severity": "page"
+      },
+      "annotations": {},
+      "startsAt": "2026-10-16T19:37:47.922Z",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "http://62a1102520ad:9090/graph?g0.expr=up%7Bjob%3D%22services%22%7D+%3D%3D+0&g0.tab=1",
+      "fingerprint": "1932888fcc3a68c0"
+    },
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "HighErrorRate",
+        "env": "local",
+        "rid": "svc:checkout",
+        "severity": "page"
+      },
+      "annotations": {},
+      "startsAt": "2026-10-16T19:37:57.922Z",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "http://62a1102520ad:9090/graph?g0.expr=sum+by+%28rid%29+%28rate%28http_requests_total%7Bcode%3D~%225..%22%7D%5B30s%5D%29%29+%2F+sum+by+%28rid%29+%28rate%28http_requests_total%5B30s%5D%29%29+%3E+0.2&g0.tab=1",
+      "fingerprint": "d6f2db62c1c2c6d7"
+    },
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "HighErrorRate",
+        "env": "local",
+        "rid": "svc:web",
+        "severity": "page"
+      },
+      "annotations": {},
+      "startsAt": "2026-10-16T19:38:02.922Z",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "http://62a1102520ad:9090/graph?g0.expr=sum+by+%28rid%29+%28rate%28http_requests_total%7Bcode%3D~%225..%22%7D%5B30s%5D%29%29+%2F+sum+by+%28rid%29+%28rate%28http_requests_total%5B30s%5D%29%29+%3E+0.2&g0.tab=1",
+      "fingerprint": "b0275b0a054a704d"
+    }
+  ],
+  "groupLabels": {
+    "env": "local"
+  },
+  "commonLabels": {
+    "env": "local",
+    "severity": "page"
+  },
+  "commonAnnotations": {},
+  "externalURL": "http://45b5cbaf8ae7:9093",
+  "version": "4",
+  "groupKey": "{}:{env=\"local\"}",
+  "truncatedAlerts": 0
+}

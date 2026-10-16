@@ -3,7 +3,7 @@
   GET  /                              incident UI (api/static/index.html)
   GET  /healthz                       liveness + FalkorDB reachability
   POST /hooks/alertmanager            bearer WEBHOOK_TOKEN; saves the raw payload, ingests it
-                                      into the graph and investigates newly opened incidents
+                                      into the graph and (re)investigates the incident it opened or grew
   GET  /api/incidents                 newest incidents with their top suspect (Q19)
   GET  /api/incidents/{id}            stored report + actions (Q20)
   GET  /api/graph                     resource nodes + edges for the graph panel (Q17, Q18)
@@ -159,7 +159,9 @@ async def alertmanager_hook(request: Request, background: BackgroundTasks,
     path.write_text(json.dumps(payload, indent=2))
     with LOCK:
         result = alert_ingest.ingest(g(), payload, now=now())
-    if result["opened"]:
+    # Alertmanager delivers a group in batches: investigate when an incident opens and again
+    # whenever more firing alerts join it, so the report always covers the whole group.
+    if result["incident_id"] and result["firing"]:
         background.add_task(_investigate_bg, result["incident_id"])
     log.info("alertmanager hook: %s saved=%s", result, path.name)
     return {**result, "saved": path.name}

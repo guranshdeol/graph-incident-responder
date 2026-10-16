@@ -1,0 +1,25 @@
+# Alert rules (plan §9.3). Every series carries a `rid` label equal to the graph rid:
+# that label is the contract between alerts and the graph.
+groups:
+- name: rootgraph
+  rules:
+  - alert: HighErrorRate
+    expr: sum by (rid) (rate(http_requests_total{code=~"5.."}[30s])) / sum by (rid) (rate(http_requests_total[30s])) > 0.2
+    for: 15s
+    labels: {severity: page}
+  - alert: HighLatencyP95
+    expr: histogram_quantile(0.95, sum by (rid, le) (rate(http_request_duration_seconds_bucket[30s]))) > 1
+    for: 15s
+    labels: {severity: page}
+  - alert: ServiceDown
+    expr: up{job="services"} == 0
+    for: 10s
+    labels: {severity: page}
+  - alert: DependencyUnreachable
+    expr: probe_success{job="blackbox_db"} == 0
+    for: 15s
+    labels: {severity: page}
+  - alert: HostCpuSaturated
+    expr: 100 * (1 - avg by (rid) (rate(node_cpu_seconds_total{mode="idle"}[30s]))) > 90
+    for: 20s
+    labels: {severity: page}

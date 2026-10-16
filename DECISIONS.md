@@ -54,3 +54,11 @@ One line per non-obvious choice (plan §15.4). Newest at the bottom.
 - **Executor refuses** to restore rules whose source is a single instance (/32 → Compute) in v1, and refuses service names outside `[a-z0-9_-]` for SSM commands.
 - **Live approve** executes synchronously, then verifies in a background task (5 s polling, 120 s) and writes memory or marks the incident failed.
 - **New queries:** W12–W21 discovery upserts and missing-marking, W22 unlinked CloudTrail rids.
+
+## Demo stack + first real alerts (Sat 17 Oct 2026)
+
+- **One service image, five roles** (`demo/service/app.py`): `rid` label on every metric; db dependency = TCP connect with 1 s timeout (what an SG revoke breaks); CPU work per request so a CPU hog shows as latency; loadgen hits web and reports (nothing else calls reports).
+- **Configs are rendered, not hand-copied** (`demo/render.py local|aws`): same rules and labels for the local run and EC2. `alertmanager.yml` holds the webhook token: mode 600, owned by 65534 (Alertmanager runs as nobody), and `demo/build/` is gitignored.
+- **Local run reaches the API's network** as `demo-prometheus` (external network `app_default`); no host port is opened.
+- **Real S3 run, 17 Oct 01:08 IST:** stop payments → ServiceDown + HighErrorRate ×2 → webhook in ~40 s → top svc:payments 5.0 with live probe `up=0`, restart_service proposed with blast radius checkout + web. Matches the fixture oracle.
+- **Found by the real run and fixed:** (1) Alertmanager sends a group in batches, so the API now re-investigates whenever firing alerts join an open incident; (2) re-investigation reuses an existing proposal (Q21) instead of proposing twice; (3) an unreachable Prometheus made `probe` raise; it now returns outcome `error`, state unknown.

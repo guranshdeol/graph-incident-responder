@@ -5,3 +5,4 @@ __pycache__/
 .pytest_cache/
 demo/aws/state.json
 demo/aws/credentials.env
+demo/build/
