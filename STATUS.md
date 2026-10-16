@@ -27,6 +27,6 @@ Things that may differ from moto on a real account: CloudTrail→EventBridge lat
 ## Still open
 
 - SSH hardening: teammates' public keys into `/root/.ssh/authorized_keys`, then `PasswordAuthentication no`.
-- Blog post draft: `docs/blog.md` (review before publishing; side prize).
+- Blog post draft: `docs/blog.md` (facts checked; review the wording before publishing; side prize).
 - Submission: demo video, submission form (name both tracks), AI-assistance disclosure is in the README.
 - After submitting: `python -m demo.aws.estate down`, delete the admin key, rotate `WEBHOOK_TOKEN`/`ADMIN_TOKEN`/OpenRouter key; keep the Linode sandbox up for judging.
