@@ -62,3 +62,11 @@ One line per non-obvious choice (plan §15.4). Newest at the bottom.
 - **Local run reaches the API's network** as `demo-prometheus` (external network `app_default`); no host port is opened.
 - **Real S3 run, 17 Oct 01:08 IST:** stop payments → ServiceDown + HighErrorRate ×2 → webhook in ~40 s → top svc:payments 5.0 with live probe `up=0`, restart_service proposed with blast radius checkout + web. Matches the fixture oracle.
 - **Found by the real run and fixed:** (1) Alertmanager sends a group in batches, so the API now re-investigates whenever firing alerts join an open incident; (2) re-investigation reuses an existing proposal (Q21) instead of proposing twice; (3) an unreachable Prometheus made `probe` raise; it now returns outcome `error`, state unknown.
+
+## LLM agent loop (Sat 17 Oct 2026)
+
+- **Provider: OpenRouter** (team decision, D10 closed), through `agent/llm.py`'s OpenAI-compatible adapter; no SDK dependency. Off until `LLM_API_KEY` and `LLM_MODEL` are both set; then every investigation runs it.
+- **Bounded agent:** sees the scorecard + evidence (6 rows per call max, never the graph), may call up to 6 of 7 read tools; each call must carry a `reason` or it is refused and not run. Calls are traced as `by: agent` with `call_id` a1…, pipeline calls p1….
+- **Validator** (`agent/validator.py`): root cause must be a scored candidate; every rid token in the text must occur in the evidence; action kind in catalogue and aimed at the root cause; cites ≥1 call that returned rows; a re-rank needs an agent-chosen call among those. Failure or provider error → template text, pipeline proposals unchanged.
+- **Re-rank:** only a validated answer can change `top` (and so the proposal); the scorecard itself is never rewritten (`scorecard_top` kept in the report).
+- **Tokens per investigation** (D16) on the Incident (`tokens_in`, `tokens_out`, `agent_calls`, W23) and shown under the explanation.

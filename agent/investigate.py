@@ -8,8 +8,9 @@
  4 evidence  probe (fixed PromQL / fixtures) + recent_changes (Q5) per candidate
  5 memory    recall_incidents (Q7) with alert names + candidate rids
  6 score     §7.4 scorecard, written as SUSPECTS edges (W7)
- 7 explain   LLM hook (Phase 3). Until then, and whenever validation fails, a template
-             sentence built from the top row.
+ 7 explain   agent/llm.py: the LLM runs up to 6 read tools of its own (each with a reason),
+             answers in JSON, and agent/validator.py accepts or rejects it; the template
+             sentence built from the top row is the fallback.
  8 propose   an action from the catalogue for the top cause (both, if multiple causes)
 
 Every tool call lands in the trace with by="pipeline"; agent-chosen calls (Phase 3)
@@ -37,6 +38,7 @@ class Investigator:
 
     def _call(self, env: dict) -> dict:
         env["by"] = "pipeline"
+        env["call_id"] = f"p{len(self.trace) + 1}"  # the LLM cites evidence by call_id
         self.trace.append(env)
         return env
 
@@ -132,10 +134,25 @@ class Investigator:
         multiple = scoring.multiple_causes(rows)
         causes = rows[:2] if multiple else rows[:1]
 
-        # 7 explain (LLM in Phase 3; template now and as the validator fallback)
+        # 7 explain: the LLM agent may run its own read tools (with reasons) and re-rank only
+        # with new evidence the validator accepts; the template is the fallback
         explanation, explained_by = template_explanation(rows, len(alerting), multiple), "template"
-        if self.explain:
-            explanation, explained_by = self.explain(rows, self.trace, explanation)
+        top = rows[0]["rid"] if rows else None
+        llm = {"tokens_in": 0, "tokens_out": 0, "agent_calls": 0, "llm_answer": None}
+        if self.explain and rows:
+            try:
+                res = self.explain.explain(rows, self.trace, explanation, alerting)
+            except Exception as exc:  # provider down, timeout, bad response: the pipeline answer stands
+                res = {"explanation": explanation, "explained_by": f"template (llm error: {str(exc)[:200]})",
+                       "root_cause_rid": None, "agent_trace": [], "tokens_in": 0, "tokens_out": 0,
+                       "agent_calls": 0, "llm_answer": None}
+            self.trace.extend(res["agent_trace"])
+            explanation, explained_by = res["explanation"], res["explained_by"]
+            llm = {k: res[k] for k in ("tokens_in", "tokens_out", "agent_calls", "llm_answer")}
+            db.run(self.g, "w23_incident_llm_stats", {"id": incident_id, **{k: llm[k] for k in ("tokens_in", "tokens_out", "agent_calls")}})
+            if res["root_cause_rid"] and res["root_cause_rid"] != top:
+                top = res["root_cause_rid"]  # validated re-rank: agent-chosen evidence backed it
+                causes = [r for r in rows if r["rid"] == top] + [r for r in causes if r["rid"] != top][: 1 if multiple else 0]
 
         # 8 propose
         proposals = []
@@ -144,11 +161,11 @@ class Investigator:
 
         report = {
             "incident_id": incident_id, "at": now, "alerting": alerting, "alertnames": alertnames,
-            "scorecard": rows, "top": rows[0]["rid"] if rows else None, "multiple_causes": multiple,
-            "root_change_id": change_ids.get(rows[0]["rid"]) if rows else None,
+            "scorecard": rows, "top": top, "scorecard_top": rows[0]["rid"] if rows else None,
+            "multiple_causes": multiple, "root_change_id": change_ids.get(top) if top else None,
             "broken_paths": broken_paths, "recalled": recalled,
             "explanation": explanation, "explained_by": explained_by,
-            "proposals": proposals, "trace": self.trace,
+            "proposals": proposals, "trace": self.trace, "llm": llm,
         }
         db.run(self.g, "w11_update_incident", {"id": incident_id, "report": json.dumps(report), "status": None})
         return report

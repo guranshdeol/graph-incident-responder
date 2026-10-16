@@ -302,7 +302,9 @@ function render(inc) {
   $("explanation").textContent = rep.explanation;
   $("multi").hidden = !rep.multiple_causes;
   if (rep.multiple_causes) $("multi").textContent = `Multiple likely causes: ${rep.scorecard.slice(0, 2).map(r => `${r.rid} (${r.score})`).join(" and ")}. The scorecard ranks causes but does not split the alerts between them.`;
-  $("explainedBy").textContent = `Explanation: ${rep.explained_by}`;
+  const u = rep.llm || {};
+  $("explainedBy").textContent = `Explanation: ${rep.explained_by}` +
+    (u.tokens_in || u.tokens_out ? ` · ${u.agent_calls} agent-chosen calls · ${u.tokens_in} tokens in / ${u.tokens_out} out` : "");
   $("recall").textContent = rep.recalled.length ? ` · Seen before in ${rep.recalled.map(r => r["i.id"]).join(", ")}` : "";
 
   renderProposals(rep, inc.actions);
@@ -364,12 +366,14 @@ function renderTrace(rep) {
   const head = el("tr", {}, ...["#", "By", "Tool", "Arguments", "Outcome", "ms"].map(h => el("th", {}, h)));
   const rows = rep.trace.map((t, i) => {
     const detail = el("details", {}, el("summary", {}, el("code", {}, t.tool)),
+      t.reason ? el("p", { class: "meta", style: "margin:6px 0 0" }, `Reason: ${t.reason}`) : null,
       t.cypher ? el("pre", {}, t.cypher) : null,
       t.tool === "probe" && t.rows[0]?.promql?.length ? el("pre", {}, t.rows[0].promql.join("\n")) : null,
       el("pre", {}, JSON.stringify(t.rows, null, 1)));
     return el("tr", {}, el("td", {}, i + 1),
       el("td", {}, el("span", { class: "pill " + (t.by === "agent" ? "agent" : "") }, t.by === "agent" ? "agent-chosen" : "pipeline")),
-      el("td", {}, detail), el("td", {}, el("code", {}, JSON.stringify(t.args))),
+      el("td", {}, detail, t.reason ? el("div", { class: "meta", style: "font-size:13px;margin-top:4px" }, t.reason) : null),
+      el("td", {}, el("code", {}, JSON.stringify(t.args))),
       el("td", {}, el("span", { class: "pill " + (t.outcome === "error" ? "bad" : t.outcome === "not_in_graph" ? "warn" : "good") }, t.outcome)),
       el("td", { class: "num" }, t.ms));
   });

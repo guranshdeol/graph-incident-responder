@@ -30,7 +30,7 @@ from pathlib import Path
 from fastapi import BackgroundTasks, Body, FastAPI, Header, HTTPException, Request
 from fastapi.responses import FileResponse
 
-from agent import actions, memory, sandbox
+from agent import actions, llm, memory, sandbox
 from agent.investigate import Investigator
 from agent.probe import FixtureProbe, PrometheusProbe
 from agent.tools import Tools
@@ -114,7 +114,9 @@ def _resync_live() -> None:
 
 def _investigate(incident_id: str, probe_source, scenario: dict | None = None) -> dict:
     _resync_live()
-    report = Investigator(g(), probe_source, now=lambda: now()).run(incident_id)
+    client = llm.client_from_env()
+    agent = llm.Agent(client, Tools(g()), probe_source, now=lambda: now()) if client else None
+    report = Investigator(g(), probe_source, now=lambda: now(), explain=agent).run(incident_id)
     if scenario:
         report["scenario"] = scenario
         db.run(g(), "w11_update_incident", {"id": incident_id, "report": json.dumps(report), "status": None})
