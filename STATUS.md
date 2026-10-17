@@ -1,4 +1,4 @@
-# Status (updated Sat 17 Oct 2026, ~13:00 IST)
+# Status (updated Sat 17 Oct 2026, ~13:45 IST)
 
 ## Done and running
 
@@ -7,12 +7,13 @@
   - `/live/` live AWS (`api-live`, `ops_live`, operator token), plus `discovery` + `ingester` workers (compose profile `aws`).
 - **Live AWS estate (Sydney, ap-southeast-2; the team's AWS Organization allows only this region):** VPC, 3 SGs (rules A/B), host-1 + host-2 (EC2, demo stack via SSM), orders-db (RDS), CloudTrail → EventBridge → SQS, IAM users discovery / ingester / executor / chaos (revoke-only, for the site's Break-it button). Budget: $10/month, alert at 80 % to shahbhavyasp@gmail.com and guranshdeol01@gmail.com. Cost ≈ $0.10/h from the $100 Free-plan credit.
 - **Real S1 runs** (README "Live on real AWS"): root cause correct (7.75 with memory), executor fix verified, 162 s from incident open to resolved. Five live-only bugs found and fixed (DECISIONS.md).
-- Pipeline, scoring, memory, LLM agent (OpenRouter Nemotron, Ultra → Super fallback), validator, MCP server, evaluation (coverage-only 2/5 vs scorecard 5/5). 77 tests pass.
+- **Changes made by hand, verified on real AWS:** container stopped (93 s), security group detached from RDS (52 s), host-2 stopped (64 s), rule edited 5432→5433 (verified). The live page shows every change in the account and a per-incident timeline marking the change that caused it. Sandbox has the same as S6–S8.
+- Pipeline, scoring, memory, LLM agent (OpenRouter Nemotron, Ultra → Super fallback), validator, MCP server, evaluation (coverage-only 2/5 vs scorecard 5/5). 83 tests pass.
 - Docs: README, docs/graph.md (all queries), docs/evaluation.md, docs/CHECKING.md (how to check on the site), docs/blog.md (draft).
 
 ## How to check it
 
-docs/CHECKING.md. Sandbox: click S1 → approve → S4. Live: `/live/` + operator token → "Break it for real" → approve.
+docs/CHECKING.md. Sandbox: click S1 → approve → S4. Live: `/live/` + operator token → change something in the AWS console (or the BACKUP button) → approve.
 
 ## Still open
 
