@@ -52,6 +52,10 @@ STATIC = Path(__file__).resolve().parent / "static"
 # One writer at a time: injections, investigations and approvals are short, and
 # serialising them keeps the public sandbox consistent.
 LOCK = threading.Lock()
+# Investigations are slow (resync + LLM, up to minutes): their own lock, never held by the webhook,
+# so "resolved" notifications are ingested immediately even while an investigation runs.
+INVEST_LOCK = threading.Lock()
+LIVE_VERIFY_TIMEOUT = int(os.environ.get("LIVE_VERIFY_TIMEOUT", "300"))
 
 app = FastAPI(title="rootgraph", docs_url=None, redoc_url=None, openapi_url=None)
 
@@ -138,8 +142,12 @@ def healthz():
 
 
 def _investigate_bg(incident_id: str):
-    with LOCK:
+    with INVEST_LOCK:
         try:
+            acts = get_incident(incident_id)["actions"]
+            if any(a["status"] != "proposed" for a in acts):   # a human already acted: keep the report that led to it
+                log.info("not re-investigating %s: an action is already %s", incident_id, [a["status"] for a in acts])
+                return
             _investigate(incident_id, _probe_source_for(None)[0])
         except Exception:
             log.exception("investigation of %s failed", incident_id)
@@ -159,11 +167,10 @@ async def alertmanager_hook(request: Request, background: BackgroundTasks,
 
     path = HOOKS_DIR / f"alertmanager-{time.time_ns()}.json"
     path.write_text(json.dumps(payload, indent=2))
-    with LOCK:
-        result = alert_ingest.ingest(g(), payload, now=now())
+    result = alert_ingest.ingest(g(), payload, now=now())     # never waits on an investigation
     # Alertmanager delivers a group in batches: investigate when an incident opens and again
-    # whenever more firing alerts join it, so the report always covers the whole group.
-    if result["incident_id"] and result["firing"]:
+    # whenever NEW firing alerts join it, so the report always covers the whole group.
+    if result["incident_id"] and (result["opened"] or result["new_firing"]):
         background.add_task(_investigate_bg, result["incident_id"])
     log.info("alertmanager hook: %s saved=%s", result, path.name)
     return {**result, "saved": path.name}
@@ -300,10 +307,11 @@ def _finish(graph, action: dict, t: int, verify_timeout: int, sleep=time.sleep) 
 
 
 def _finish_live_bg(action: dict, t: int):
-    """Live: real alerts take time to resolve, so verification polls (5s x up to 120s) off the request."""
+    """Live: real alerts take minutes to resolve (rate windows, Alertmanager group interval), so verification
+    polls every 5 s for up to LIVE_VERIFY_TIMEOUT (300 s) off the request."""
     graph = g()
     try:
-        out = _finish(graph, action, t, verify_timeout=120)
+        out = _finish(graph, action, t, verify_timeout=LIVE_VERIFY_TIMEOUT)
         log.info("verification of %s: %s", action["id"], out)
     except Exception:
         log.exception("verification of %s failed", action["id"])
@@ -332,7 +340,7 @@ def approve(action_id: str, background: BackgroundTasks, body: dict | None = Bod
             out = _finish(graph, action, t, verify_timeout=0)
         else:
             background.add_task(_finish_live_bg, action, t)
-            out = {"verified": None, "detail": "executed; verifying in the background (up to 120s)"}
+            out = {"verified": None, "detail": f"executed; verifying in the background (up to {LIVE_VERIFY_TIMEOUT}s)"}
     return {"action": actions.get(graph, action_id), "verify": out}
 
 

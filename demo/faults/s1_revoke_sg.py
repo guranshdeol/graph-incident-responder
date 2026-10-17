@@ -8,7 +8,7 @@ from pathlib import Path
 import boto3
 
 st = json.loads((Path(__file__).resolve().parents[1] / "aws/state.json").read_text())
-ec2 = boto3.client("ec2", region_name=os.environ.get("AWS_REGION", "ap-south-1"))
+ec2 = boto3.client("ec2", region_name=os.environ.get("AWS_REGION", "ap-southeast-2"))
 rule_a = st["sg_rules"]["rule_a"]
 live = ec2.describe_security_group_rules(Filters=[{"Name": "group-id", "Values": [st["sg_db"]]}])["SecurityGroupRules"]
 if not any(r["SecurityGroupRuleId"] == rule_a for r in live):

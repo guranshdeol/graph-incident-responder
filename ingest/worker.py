@@ -21,7 +21,7 @@ from graph import db
 from ingest import cloudtrail_stream, discovery_aws
 
 log = logging.getLogger("rootgraph.worker")
-REGION = os.environ.get("AWS_REGION", "ap-south-1")
+REGION = os.environ.get("AWS_REGION", "ap-southeast-2")
 
 
 def session(prefix: str) -> boto3.Session:

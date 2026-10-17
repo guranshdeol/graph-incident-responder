@@ -6,7 +6,8 @@
   (scenario S4) is a new node instead of reusing the old one.
 - Grouping: one Alertmanager group = one Incident. Firing alerts attach to an
   open incident of the same groupKey opened in the last 10 minutes (Q12, W5b);
-  otherwise a new incident is opened (W5).
+  otherwise a new incident is opened (W5). Alerts already filed in any incident
+  (Q22) are never filed again, so repeats of the group open nothing new.
 - Resolved notifications only update alert status; they drive verification.
 """
 
@@ -68,16 +69,23 @@ def ingest(g, payload: dict, now: int | None = None) -> dict:
 
     firing = [a["id"] for a in alerts if a["status"] == "firing"]
     group_key = payload.get("groupKey", "default")
-    incident_id, opened = None, False
+    incident_id, opened, new = None, False, []
     if firing:
+        # alerts we already filed (Alertmanager repeats the whole group in every notification)
+        _, held = db.run(g, "q22_incident_of_alerts", {"ids": firing})
+        filed = {aid for r in held for aid in r["alert_ids"]}
+        new = [a for a in firing if a not in filed]
         _, rows = db.run(g, "q12_open_incident_for_group",
                          {"group_key": group_key, "since": now - GROUP_WINDOW_SECONDS})
         if rows:
             incident_id = rows[0]["id"]
-            db.run(g, "w5b_attach_alerts", {"id": incident_id, "alert_ids": firing})
-        else:
+            if new:
+                db.run(g, "w5b_attach_alerts", {"id": incident_id, "alert_ids": new})
+        elif new:
             incident_id, opened = f"INC-{uuid.uuid4().hex[:8]}", True
             db.run(g, "w5_open_incident",
-                   {"id": incident_id, "group_key": group_key, "now": now, "alert_ids": firing})
+                   {"id": incident_id, "group_key": group_key, "now": now, "alert_ids": new})
+        else:   # every firing alert is already filed (e.g. its incident failed verification): no new incident
+            incident_id = held[0]["id"]
     return {"incident_id": incident_id, "opened": opened, "alerts": len(alerts),
-            "firing": len(firing), "unlinked_rids": unlinked}
+            "firing": len(firing), "new_firing": len(new), "unlinked_rids": unlinked}

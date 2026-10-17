@@ -161,7 +161,7 @@ def render_aws(token):
     from demo.aws import estate  # state.json path lives there (tests point it elsewhere)
     st = json.loads(estate.STATE.read_text())
     import boto3  # only needed for the real ids/IPs
-    s = boto3.Session(region_name=os.environ.get("AWS_REGION", "ap-south-1"))
+    s = boto3.Session(region_name=os.environ.get("AWS_REGION", "ap-southeast-2"))
     inst = {i["InstanceId"]: i for r in s.client("ec2").describe_instances(InstanceIds=[st["host1"], st["host2"]])["Reservations"]
             for i in r["Instances"]}
     h1, h2 = inst[st["host1"]], inst[st["host2"]]

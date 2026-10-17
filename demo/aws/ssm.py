@@ -8,7 +8,7 @@ import boto3
 
 from demo.aws import estate
 
-REGION = os.environ.get("AWS_REGION", "ap-south-1")
+REGION = os.environ.get("AWS_REGION", "ap-southeast-2")
 
 
 def state() -> dict:

@@ -30,7 +30,7 @@ HERE = Path(__file__).resolve().parent
 STATE = HERE / "state.json"
 CREDS = HERE / "credentials.env"
 PATTERN = json.loads((HERE / "eventbridge-pattern.json").read_text())
-REGION = os.environ.get("AWS_REGION", "ap-south-1")
+REGION = os.environ.get("AWS_REGION", "ap-southeast-2")   # this team's AWS org allows only Sydney (SCP)
 TAG = {"Key": "rootgraph", "Value": "demo"}
 SECRET_KEYS = {"db_password", "users"}  # never printed
 AMI_PARAM = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64"
@@ -80,6 +80,7 @@ def step(st: dict, key: str, fn):
 class Estate:
     def __init__(self, session: boto3.Session, wait: bool = True):
         self.s, self.wait = session, wait
+        self.region = session.region_name or REGION   # everything follows the session (the org may allow one region only)
         self.ec2, self.rds, self.iam = session.client("ec2"), session.client("rds"), session.client("iam")
         self.sqs, self.events, self.ct = session.client("sqs"), session.client("events"), session.client("cloudtrail")
         self.s3, self.ssm, self.sts = session.client("s3"), session.client("ssm"), session.client("sts")
@@ -202,8 +203,8 @@ class Estate:
         return r["Instances"][0]["InstanceId"]
 
     def _trail_bucket(self) -> str:
-        bucket = f"rootgraph-trail-{self.account}-{REGION}"
-        kw = {} if REGION == "us-east-1" else {"CreateBucketConfiguration": {"LocationConstraint": REGION}}
+        bucket = f"rootgraph-trail-{self.account}-{self.region}"
+        kw = {} if self.region == "us-east-1" else {"CreateBucketConfiguration": {"LocationConstraint": self.region}}
         self.s3.create_bucket(Bucket=bucket, **kw)
         policy = {"Version": "2012-10-17", "Statement": [
             {"Sid": "AclCheck", "Effect": "Allow", "Principal": {"Service": "cloudtrail.amazonaws.com"},
@@ -235,7 +236,7 @@ class Estate:
         return arn
 
     def _users(self, sg_db: str, queue: dict) -> dict:
-        region, acct = REGION, self.account
+        region, acct = self.region, self.account
         policies = {
             "rootgraph-discovery": [{"Effect": "Allow", "Action": ["ec2:Describe*", "rds:Describe*"], "Resource": "*"}],
             "rootgraph-ingester": [{"Effect": "Allow", "Action": ["sqs:ReceiveMessage", "sqs:DeleteMessage",
@@ -260,7 +261,7 @@ class Estate:
 
     def _write_credentials(self, st: dict, users: dict, queue: dict) -> None:
         lines = ["# rootgraph live AWS (from demo/aws/estate.py up). Append to the server's .env. Never commit.",
-                 f"AWS_REGION={REGION}", f"CHANGES_QUEUE_URL={queue['url']}"]
+                 f"AWS_REGION={self.region}", f"CHANGES_QUEUE_URL={queue['url']}"]
         for user, prefix in (("rootgraph-discovery", "DISCOVERY"), ("rootgraph-ingester", "INGESTER"),
                              ("rootgraph-executor", "EXECUTOR")):
             lines += [f"{prefix}_AWS_ACCESS_KEY_ID={users[user]['id']}", f"{prefix}_AWS_SECRET_ACCESS_KEY={users[user]['secret']}"]

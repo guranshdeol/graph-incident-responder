@@ -241,3 +241,14 @@ def test_finding_validator_rejects_unknown_resources(g):
     with pytest.raises(memory.InvalidFinding):
         memory.validate_text(Tools(g), "sg-nonexistent blocked svc:payments")
     assert memory.validate_text(Tools(g), "sg-db blocked svc:payments") == ["sg-db", "svc:payments"]
+
+
+def test_repeated_notifications_never_open_a_second_incident(g):
+    sc = Scenario(g, "s1", NOW)
+    first = alert_ingest.ingest(g, sc.payload("firing"), now=NOW)
+    assert first["opened"] and first["new_firing"] == 4
+    again = alert_ingest.ingest(g, sc.payload("firing"), now=NOW + 20)        # Alertmanager repeats the group
+    assert again["incident_id"] == first["incident_id"] and not again["opened"] and again["new_firing"] == 0
+    g.query("MATCH (i:Incident {id: $id}) SET i.status = 'failed'", {"id": first["incident_id"]})
+    late = alert_ingest.ingest(g, sc.payload("firing"), now=NOW + 400)        # incident failed, same alerts still firing
+    assert late["incident_id"] == first["incident_id"] and not late["opened"]
