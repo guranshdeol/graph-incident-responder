@@ -70,13 +70,26 @@ Clean run, measured (incident `INC-2f75fef8`):
 
 On an earlier run, CloudTrail's `RevokeSecurityGroupIngress` (with the actor) reached the graph through EventBridge → SQS in 4 s, and the graph diff recorded the removal 10 s after the change. The live runs also found five bugs the fake-AWS tests could not (webhook blocked behind a slow investigation, re-investigation after approval, repeated notifications opening a second incident, a 120 s verification window that was too short, a duplicate proposal from a late re-investigation); all are fixed, with regression tests (see DECISIONS.md).
 
+### Changes made by hand (17 Oct 2026, afternoon)
+
+Nobody tells rootgraph what changed. A person changes the real account (console, CLI, `docker stop`); CloudTrail and the discovery diff put the change in the graph; Prometheus alerts open an incident; the agent searches the graph (and `changes_since`) for the change that explains the alerts, and proposes the exact undo. Measured on real AWS, a person approving each fix:
+
+| Change made by hand | What rootgraph concluded | Undo it proposed | Incident open → resolved |
+|---|---|---|---|
+| `docker stop payments` on host-1 (no CloudTrail event) | `payments` is down; network fine | `restart_service` (`docker start payments` over SSM) | 93 s |
+| Rule A edited 5432 → 5433 (`ModifySecurityGroupRules`) | db security group: "rule edited, tcp 5432 → 5433 from sg-host1" | `revert_rule_edit` (rule back to 5432) | verified (first try hit an IAM gap, fixed; see DECISIONS.md) |
+| `rootgraph-db` detached from orders-db (RDS `ModifyDBInstance`) | `orders-db`: "security group sg-09a1… was detached"; 12 alerts across both hosts, 8.75 vs 2.29 | `reattach_security_group` (RDS modify, apply immediately) | 52 s |
+| host-2 stopped (`StopInstances`) | host-2: running → stopped; its services are victims, not causes | `start_instance` (services come back on their own) | 64 s |
+
+Each incident page shows a **What happened** timeline (the change, who made it, the alerts, the decision), and the live page lists every change in the account as it lands.
+
 The live page is `https://172-232-86-149.sslip.io/live/` (operator token required). How to check everything yourself: [docs/CHECKING.md](docs/CHECKING.md).
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-  subgraph AWS["AWS ap-south-1: monitored estate"]
+  subgraph AWS["AWS ap-southeast-2 (Sydney): monitored estate"]
     H1["EC2 host-1<br/>web, checkout, payments, loadgen<br/>Prometheus, Alertmanager<br/>blackbox, node_exporter"]
     H2["EC2 host-2<br/>orders, reports<br/>blackbox, node_exporter"]
     SG["Security groups<br/>rule A: host-1 to db 5432<br/>rule B: host-2 to db 5432"]
@@ -228,7 +241,7 @@ set -a; . ./.env; set +a; FALKORDB_HOST=localhost PROMETHEUS_URL= LLM_API_KEY= u
 
 ### d. Live AWS
 
-Follow [demo/aws/setup.md](demo/aws/setup.md). It creates the estate in `ap-south-1`, the trail, the event rule and queue, the least-privilege IAM users, and the credentials file the control plane reads.
+Follow [demo/aws/setup.md](demo/aws/setup.md). It creates the estate in `ap-southeast-2` (Sydney), the trail, the event rule and queue, the least-privilege IAM users, and the credentials file the control plane reads.
 
 ### e. Demo stack
 
@@ -240,7 +253,7 @@ Set `LLM_API_KEY` and `LLM_MODEL` in `.env`. `LLM_MODEL` is an OpenRouter model 
 
 ### g. MCP
 
-`agent/mcp_server.py` exposes the ten read tools (`correlate_alerts`, `check_path`, `removed_rules`, `recent_changes`, `blast_radius`, `path_between`, `dependencies`, `recall_incidents`, `load_bearing`, `resolve`) over MCP stdio, annotated read-only. They run the same fixed Cypher as the pipeline and return the same envelopes. There is no write, approval or free-form Cypher tool. With an SSH tunnel to FalkorDB (`ssh -L 6379:localhost:6379 root@<server>`), run it with:
+`agent/mcp_server.py` exposes the twelve read tools (`correlate_alerts`, `check_path`, `removed_rules`, `detached_on_path`, `changes_since`, `recent_changes`, `blast_radius`, `path_between`, `dependencies`, `recall_incidents`, `load_bearing`, `resolve`) over MCP stdio, annotated read-only. They run the same fixed Cypher as the pipeline and return the same envelopes. There is no write, approval or free-form Cypher tool. With an SSH tunnel to FalkorDB (`ssh -L 6379:localhost:6379 root@<server>`), run it with:
 
 ```bash
 set -a; . ./.env; set +a; FALKORDB_HOST=localhost MCP_GRAPH=ops_sandbox uv run python -m agent.mcp_server

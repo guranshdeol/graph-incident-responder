@@ -146,7 +146,7 @@ def _investigate_bg(incident_id: str):
     with INVEST_LOCK:
         try:
             acts = get_incident(incident_id)["actions"]
-            if any(a["status"] != "proposed" for a in acts):   # a human already acted: keep the report that led to it
+            if any(a["status"] not in ("proposed", "failed", "rejected") for a in acts):   # a human acted and it stands
                 log.info("not re-investigating %s: an action is already %s", incident_id, [a["status"] for a in acts])
                 return
             _investigate(incident_id, _probe_source_for(None)[0])
@@ -202,6 +202,13 @@ def graph_view():
     _, nodes = db.run(g(), "q17_resource_nodes")
     _, edges = db.run(g(), "q18_resource_edges")
     return {"graph": GRAPH_NAME, "nodes": nodes, "edges": edges}
+
+
+@app.get("/api/changes")
+def changes(minutes: int = 120):
+    """The 'what changed in your account' feed: CloudTrail + discovery diff, newest first."""
+    env = Tools(g()).changes_since(max(1, min(minutes, 24 * 60)), limit=40, now=now())
+    return {"graph": GRAPH_NAME, "changes": env["rows"]}
 
 
 @app.get("/api/scenarios")
@@ -369,6 +376,8 @@ def approve(action_id: str, background: BackgroundTasks, body: dict | None = Bod
             actions.execute(graph, action_id, executor, now=t)
         except Exception as exc:
             log.exception("execution of %s failed", action_id)
+            # an error response drops BackgroundTasks, so use a thread: look again and propose afresh
+            threading.Thread(target=_investigate_bg, args=(action["incident_id"],), daemon=True).start()
             raise HTTPException(status_code=502, detail=f"execution failed: {exc}")
         if SANDBOX_MODE:
             out = _finish(graph, action, t, verify_timeout=0)

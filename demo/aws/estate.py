@@ -138,6 +138,7 @@ class Estate:
 
         users = step(st, "users", lambda: self._users(sg_db, queue))
         step(st, "chaos", lambda: self._chaos_user(sg_db))
+        step(st, "executor_undo_v2", lambda: self._executor_undo(st))
         self._write_credentials(st, users, queue)
         if self.wait:
             print("waiting for instances and orders-db (RDS takes ~10 min)...")
@@ -260,6 +261,28 @@ class Estate:
             key = self.iam.create_access_key(UserName=user)["AccessKey"]
             out[user] = {"id": key["AccessKeyId"], "secret": key["SecretAccessKey"]}
         return out
+
+    def _executor_undo(self, st: dict) -> bool:
+        """Widen the executor to the undo actions for changes made by hand: put an edited rule back,
+        re-attach a detached security group, start a stopped instance. Still nothing that deletes."""
+        r, a = self.region, self.account
+        sgs = [f"arn:aws:ec2:{r}:{a}:security-group/{st[k]}" for k in ("sg_host1", "sg_host2", "sg_db")]
+        demo = {"StringEquals": {"aws:ResourceTag/rootgraph": "demo"}}
+        stmts = [
+            {"Effect": "Allow", "Action": "ec2:AuthorizeSecurityGroupIngress", "Resource": sgs[2]},
+            {"Effect": "Allow", "Action": "ec2:ModifySecurityGroupRules",
+             "Resource": sgs + [f"arn:aws:ec2:{r}:{a}:security-group-rule/*"]},  # the rule's source group counts too
+            {"Effect": "Allow", "Action": ["ec2:StartInstances", "ec2:ModifyInstanceAttribute"],
+             "Resource": f"arn:aws:ec2:{r}:{a}:instance/*", "Condition": demo},
+            {"Effect": "Allow", "Action": "ec2:ModifyInstanceAttribute", "Resource": sgs},
+            {"Effect": "Allow", "Action": "rds:ModifyDBInstance", "Resource": f"arn:aws:rds:{r}:{a}:db:orders-db"},
+            {"Effect": "Allow", "Action": ["ec2:Describe*", "rds:DescribeDBInstances"], "Resource": "*"},
+            {"Effect": "Allow", "Action": "ssm:SendCommand", "Resource": f"arn:aws:ec2:{r}:{a}:instance/*",
+             "Condition": {"StringEquals": {"ssm:resourceTag/rootgraph": "demo"}}},
+            {"Effect": "Allow", "Action": "ssm:SendCommand", "Resource": f"arn:aws:ssm:{r}::document/AWS-RunShellScript"}]
+        self.iam.put_user_policy(UserName="rootgraph-executor", PolicyName="rootgraph-executor",
+                                 PolicyDocument=json.dumps({"Version": "2012-10-17", "Statement": stmts}))
+        return True
 
     def _chaos_user(self, sg_db: str) -> dict:
         """The 'human who makes the bad change' for the site's Break-it button: it can ONLY revoke ingress

@@ -96,6 +96,18 @@ def recall_incidents(alertnames: list[str], candidate_rids: list[str]) -> str:
 
 
 @server.tool(annotations=READ_ONLY)
+def changes_since(minutes: int = 30) -> str:
+    """Every infrastructure change in the account (CloudTrail + discovery diff) in the last N minutes, with who made it."""
+    return _out(_tools().changes_since(minutes))
+
+
+@server.tool(annotations=READ_ONLY)
+def detached_on_path(from_svc: str, to_rid: str, minutes: int = 30) -> str:
+    """On a broken path: was a security group detached from the dependency's host or target?"""
+    return _out(_tools().detached_on_path(from_svc, to_rid, minutes))
+
+
+@server.tool(annotations=READ_ONLY)
 def load_bearing(limit: int = 10) -> str:
     """The most load-bearing resources by PageRank over DEPENDS_ON."""
     return _out(_tools().load_bearing(limit))

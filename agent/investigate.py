@@ -134,6 +134,15 @@ class Investigator:
                 c.evidence.append("changed: " + "; ".join(dict.fromkeys(
                     f"{r['ch.event_name']} by {r['ch.actor'] or r['ch.source']}" for r in own[:3])))
 
+        # 4b search the whole account: what changed recently, anywhere? (also the incident timeline)
+        feed = self._call(self.tools.changes_since(WINDOW_MINUTES, limit=20, now=now))
+        timeline = [{"at": r["at"], "kind": "change", "event": r["event_name"], "actor": r["actor"], "source": r["source"],
+                     "resources": r["resources"], "names": r["names"], "before": r["before"], "after": r["after"]}
+                    for r in feed["rows"] if not r.get("by_agent")] if feed["outcome"] == ANSWERED else []
+        starts = [a["starts_at"] for a in firing if a.get("starts_at")]
+        if starts:
+            timeline.append({"at": min(starts), "kind": "alerts", "event": f"{len(firing)} alerts firing", "names": alertnames})
+
         # 5 memory
         recall = self._call(self.tools.recall_incidents(alertnames, list(dict.fromkeys(list(cands) + alerting))))
         recalled = recall["rows"] if recall["outcome"] == FROM_MEMORY else []
@@ -191,6 +200,7 @@ class Investigator:
             "broken_paths": broken_paths, "recalled": recalled,
             "explanation": explanation, "explained_by": explained_by,
             "proposals": proposals, "trace": self.trace, "llm": llm,
+            "timeline": sorted(timeline + [{"at": now, "kind": "decided", "event": f"root cause: {top}"}], key=lambda e: e["at"]),
         }
         db.run(self.g, "w11_update_incident", {"id": incident_id, "report": json.dumps(report), "status": None})
         return report

@@ -40,7 +40,11 @@ READ_TOOLS = {
     "recall_incidents": ({"alertnames": "array", "candidate_rids": "array"},
                          "Past resolved incidents matched by alert names or root cause."),
     "removed_rules": ({"from_svc": "string", "to_rid": "string"},
-                      "On a broken path: which firewall on the target lost a rule that used to permit it (last 30 min)."),
+                      "On a broken path: which firewall on the target lost or had a rule edited that used to permit it (last 30 min)."),
+    "detached_on_path": ({"from_svc": "string", "to_rid": "string"},
+                         "On a broken path: was a security group detached from the dependency's host or target (last 30 min)?"),
+    "changes_since": ({"minutes": "integer"},
+                      "Search the WHOLE account: every infrastructure change (CloudTrail + discovery diff) in the last N minutes, with who made it. Use it to find a change the scorecard may have missed."),
 }
 
 SYSTEM = """You are rootgraph's incident investigator. A deterministic pipeline has already walked a
@@ -50,7 +54,7 @@ You receive that scorecard and the evidence (each tool call has a call_id).
 Before answering, verify the ranking yourself: make at least one and at most 6 read-only tool calls,
 for example to check whether a high-coverage candidate is actually healthy (probe), whether a
 dependency path is blocked (check_path, removed_rules), or who changed the top candidate
-(recent_changes). Every tool call MUST include a short `reason` saying what you are checking and why. You cannot write Cypher,
+(recent_changes). changes_since searches the whole account for anything that changed recently. Every tool call MUST include a short `reason` saying what you are checking and why. You cannot write Cypher,
 change anything, or approve fixes.
 
 Finish with ONLY a JSON object, no prose around it:
@@ -145,6 +149,10 @@ class Agent:
             return t.recall_incidents(list(a.get("alertnames") or []), list(a.get("candidate_rids") or []))
         if name == "check_path":
             return t.check_path(a["from_svc"], a["to_rid"])
+        if name == "detached_on_path":
+            return t.detached_on_path(a["from_svc"], a["to_rid"], now=int(self.now()))
+        if name == "changes_since":
+            return t.changes_since(int(a.get("minutes") or 30), now=int(self.now()))
         raise KeyError(name)
 
     def explain(self, rows: list[dict], trace: list[dict], template: str, alerting: list[str]) -> dict:

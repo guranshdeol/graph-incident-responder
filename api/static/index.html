@@ -137,6 +137,16 @@ details summary { cursor: pointer; }
 .empty h2 { font-weight: 700; font-size: clamp(26px, 3.4vw, 40px); letter-spacing: -0.03em; line-height: 1.2; margin: 0 0 8px; color: var(--ink); }
 .empty p { font: 400 18px/1.56 var(--serif); color: var(--graphite); margin: 0; }
 .err { color: var(--coral); }
+.feed, .timeline { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.feed li { font-size: 13px; line-height: 1.4; padding: 8px 10px; border-radius: var(--r-btn); background: var(--canvas); }
+.feed .t, .timeline .t { font-family: var(--mono); font-size: 12px; color: var(--ink60); }
+.feed .who { font-size: 12px; color: var(--ink40); }
+.timeline li { display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 12px; font-size: 15px; align-items: baseline; }
+.timeline li.kchange span:last-child { color: var(--ink); }
+.timeline li.ctx span:last-child { color: var(--ink40); }
+.timeline li.cause span:last-child { font-weight: 600; }
+.timeline li.kalerts span:last-child { color: #b03a28; }
+.timeline li.kdecided span:last-child { font-weight: 700; }
 </style>
 </head>
 <body>
@@ -163,9 +173,16 @@ details summary { cursor: pointer; }
 
 <div class="wrap">
   <div class="app">
-    <aside class="card">
-      <p class="eyebrow">Incidents</p>
-      <ul class="incidents" id="incidents"></ul>
+    <aside>
+      <div class="card">
+        <p class="eyebrow">Incidents</p>
+        <ul class="incidents" id="incidents"></ul>
+      </div>
+      <div class="card" style="margin-top:16px">
+        <p class="eyebrow">What changed in the account</p>
+        <p class="meta" style="margin:-6px 0 10px;font-size:13px">CloudTrail + discovery, live. Changes made by hand show up here.</p>
+        <ul class="feed" id="feed"></ul>
+      </div>
     </aside>
 
     <main>
@@ -182,6 +199,11 @@ details summary { cursor: pointer; }
             <span id="incTtr" class="meta"></span>
           </div>
           <div class="alerts row" id="alerts"></div>
+        </div>
+
+        <div class="card" id="whatCard" hidden>
+          <h2 class="title" style="margin-bottom:10px">What happened</h2>
+          <ol class="timeline" id="timeline"></ol>
         </div>
 
         <div class="dark">
@@ -256,6 +278,48 @@ async function api(path, opts = {}) {
   return body;
 }
 
+const hhmmss = (t) => new Date(t * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+const who = (c) => c.by_agent ? "rootgraph" : c.actor ? c.actor.replace(/^arn:aws:[a-z]+::\d*:/, "").replace(/^assumed-role\//, "") : (c.source === "graph_diff" ? "discovery (graph diff)" : "unknown");
+const said = (c) => c.source === "graph_diff" && !c.actor ? `discovery saw: ${describe(c)}` : `${who(c)} ${describe(c)}`;
+const res = (c) => (c.names && c.names.length ? c.names : c.resources || []).join(", ");
+function describe(c) {
+  const r = res(c), e = c.event_name || c.event;
+  const M = {
+    RevokeSecurityGroupIngress: `removed a firewall rule from ${r}`,
+    AuthorizeSecurityGroupIngress: `added a firewall rule to ${r}`,
+    ModifySecurityGroupRules: `edited a firewall rule on ${r}`,
+    SecurityGroupRuleRemoved: `a firewall rule disappeared from ${r}`,
+    SecurityGroupRuleModified: `a firewall rule on ${r} changed${c.before ? ` (was ${c.before})` : ""}`,
+    SecurityGroupDetached: `a security group was detached: ${c.before || r}`,
+    InstanceStateChanged: `${r} went ${c.before} → ${c.after}`,
+    StopInstances: `stopped ${r}`, StartInstances: `started ${r}`, RebootInstances: `rebooted ${r}`,
+    ModifyInstanceAttribute: `changed ${r}'s settings (security groups)`,
+    ModifyDBInstance: `changed the database ${r}`, RebootDBInstance: `rebooted the database ${r}`, StopDBInstance: `stopped the database ${r}`,
+  };
+  return M[e] || `${e} on ${r}`;
+}
+async function refreshFeed() {
+  const data = await api("api/changes?minutes=180");
+  $("feed").replaceChildren(...(data.changes.length ? data.changes.slice(0, 14).map(c =>
+    el("li", {}, el("div", {}, el("span", { class: "t" }, hhmmss(c.at) + "  "), describe(c)), el("div", { class: "who" }, "by " + who(c))))
+    : [el("li", { class: "meta" }, "No changes in the last 3 hours.")]));
+}
+function renderTimeline(rep) {
+  const tl = rep.timeline || [];
+  // the changes that touch the root cause or a firewall on a broken path are "the cause"; the rest is context
+  const hot = new Set([rep.top, ...(rep.broken_paths || []).flatMap(b => [...(b.culprit_rules || []).map(c => c.firewall), ...(b.detached || []).map(d => d.firewall)])].filter(Boolean));
+  // the cause = the latest human change on those resources, plus the CloudTrail call behind it (discovery sees it up to ~60 s later)
+  const onHot = tl.filter(e => e.kind === "change" && !e.by_agent && (e.resources || []).some(r => hot.has(r)));
+  const last = onHot[onHot.length - 1];
+  const twin = last && last.source !== "cloudtrail" ? onHot.filter(e => e.source === "cloudtrail" && e.at <= last.at && last.at - e.at <= 90).pop() : null;
+  const isCause = (e) => e === last || e === twin;
+  $("whatCard").hidden = !tl.length;
+  $("timeline").replaceChildren(...tl.map(e => el("li", { class: "k" + e.kind + (e.kind === "change" ? (isCause(e) ? " cause" : " ctx") : "") },
+    el("span", { class: "t" }, hhmmss(e.at)),
+    el("span", {}, e.kind === "change" ? said(e) : e.kind === "alerts" ? `${e.event}: ${(e.names || []).join(", ")}` : e.event,
+       isCause(e) ? el("span", { class: "pill bad", style: "margin-left:8px" }, "the cause") : ""))));
+}
+
 const PILL = { open: "open", proposed: "open", approved: "good", executed: "good", resolved: "done", verified: "done",
                failed: "bad", unhealthy: "bad", degraded: "warn", healthy: "good" };
 function st(s) { return el("span", { class: "pill " + (PILL[s] || "") }, s ?? "—"); }
@@ -273,9 +337,9 @@ async function loadScenarios() {
       const b = e.currentTarget; b.disabled = true;
       try { const r = await api("api/live/break", { method: "POST" }); alert(`Revoked ${r.revoked}. ${r.next}.`); }
       catch (err) { alert(err.message); } finally { b.disabled = false; }
-    } }, el("span", { class: "k" }, "LIVE"), "Break it for real: revoke rule A"));
+    } }, el("span", { class: "k" }, "BACKUP"), "Break it for me: revoke rule A"));
     $("sandboxNote").hidden = false;
-    $("sandboxNote").replaceChildren("Real AWS (Sydney). Needs the operator token in the top bar. A revoke-only IAM user makes the bad change; the agent's executor can only put rules back.");
+    $("sandboxNote").replaceChildren("Real AWS (Sydney). Break something by hand in the AWS console (edit or delete a security-group rule, detach a security group, stop host-2) or stop a container on a host: it appears under \"What changed\", alerts follow, and rootgraph finds it. The backup button does it for you with a revoke-only IAM user. Operator token needed.");
     return;
   }
   $("scenarios").replaceChildren(...data.scenarios.map((s, i) =>
@@ -332,6 +396,7 @@ function render(inc) {
     (u.tokens_in || u.tokens_out ? ` · ${u.agent_calls} agent-chosen calls · ${u.tokens_in} tokens in / ${u.tokens_out} out` : "");
   $("recall").textContent = rep.recalled.length ? ` · Seen before in ${rep.recalled.map(r => r["i.id"]).join(", ")}` : "";
 
+  renderTimeline(rep);
   renderProposals(rep, inc.actions);
   renderScorecard(rep);
   renderTrace(rep);
@@ -466,9 +531,9 @@ $("token").value = store.get("rootgraph.token") || "";
 $("token").addEventListener("change", (e) => store.set("rootgraph.token", e.target.value.trim()));
 
 loadScenarios().catch(e => $("placeholder").append(el("p", { class: "err" }, e.message)));
-refreshList();
+refreshList(); refreshFeed().catch(() => {});
 setInterval(() => {
-  refreshList().catch(() => {});
+  refreshList().catch(() => {}); refreshFeed().catch(() => {});
   // keep the open incident live (verification can resolve it minutes after Approve)
   const st = document.querySelector('#incStatus .pill');
   if (current && st && !['resolved', 'failed'].includes(st.textContent)) openIncident(current).catch(() => {});

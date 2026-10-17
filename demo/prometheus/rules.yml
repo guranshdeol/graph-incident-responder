@@ -23,3 +23,7 @@ groups:
     expr: 100 * (1 - avg by (rid) (rate(node_cpu_seconds_total{mode="idle"}[30s]))) > 90
     for: 20s
     labels: {severity: page}
+  - alert: HostDown
+    expr: up{job="node"} == 0
+    for: 15s
+    labels: {severity: page}

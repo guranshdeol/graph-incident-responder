@@ -115,3 +115,30 @@ def test_inject_is_rate_limited(client, monkeypatch):
     assert client.post("/api/scenarios/s3/inject").status_code == 200
     r = client.post("/api/scenarios/s3/inject")
     assert r.status_code == 429 and "wait" in r.json()["detail"]
+
+
+def test_failed_execution_triggers_a_fresh_look(client, monkeypatch):
+    """Live S6 lesson: if the executor is refused (IAM), the action is 'failed', the API says 502, and the
+    incident is investigated again so a new proposal appears; the failed action does not block that."""
+    import types
+
+    import api.app as app_mod
+    from agent import actions
+    r = client.post("/api/scenarios/s1/inject").json()
+    action_id = client.get(f"/api/incidents/{r['incident_id']}").json()["report"]["proposals"][0]["action"]["id"]
+    def refused(self, g, action):
+        raise RuntimeError("UnauthorizedOperation")
+    monkeypatch.setattr(actions.SandboxExecutor, "run", refused)
+    looked, investigated = [], []
+    class NowThread:
+        def __init__(self, target, args, daemon):
+            self.go = lambda: target(*args)
+        def start(self):
+            self.go()
+    monkeypatch.setattr(app_mod, "threading", types.SimpleNamespace(Thread=NowThread))
+    monkeypatch.setattr(app_mod, "_investigate", lambda inc, *a, **k: investigated.append(inc))
+    real_bg = app_mod._investigate_bg
+    monkeypatch.setattr(app_mod, "_investigate_bg", lambda inc: (looked.append(inc), real_bg(inc)))
+    assert client.post(f"/api/actions/{action_id}/approve", json={}).status_code == 502
+    assert looked == investigated == [r["incident_id"]]
+    assert client.get(f"/api/incidents/{r['incident_id']}").json()["actions"][0]["status"] == "failed"

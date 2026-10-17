@@ -416,15 +416,99 @@ RETURN i.id AS id, i.status AS status, i.opened_at AS opened_at, i.ttr_seconds A
 
 ### q21_open_action_for
 
-Open_action_for: an action already proposed for this incident, kind and target, so a re-investigation reuses it instead of proposing twice.
+open_action_for: an action already proposed (or approved, executed, verified) for this incident, kind and target, so a re-investigation reuses it instead of proposing twice, even if it finished after the approval.
 
 Params: $incident_id, $kind, $target_rid
 
 ```cypher
-MATCH (x:Action {kind: $kind, status: 'proposed'})-[:FOR]->(:Incident {id: $incident_id})
+MATCH (x:Action {kind: $kind})-[:FOR]->(:Incident {id: $incident_id})
+WHERE x.status IN ['proposed', 'approved', 'executed', 'verified']
 MATCH (x)-[:TARGETS]->(:Resource {rid: $target_rid})
-RETURN x.id AS id
+RETURN x.id AS id, x.status AS status
+ORDER BY x.proposed_at DESC
 LIMIT 1
+```
+
+### q22_incident_of_alerts
+
+incident_of_alerts: which incident already holds these alerts (any status), so a later notification for the same alerts never opens a second incident.
+
+Params: $ids
+
+```cypher
+MATCH (i:Incident)-[:HAS_ALERT]->(a:Alert)
+WHERE a.id IN $ids
+RETURN i.id AS id, i.status AS status, collect(a.id) AS alert_ids
+ORDER BY size(alert_ids) DESC
+```
+
+### q23_detached_on_path
+
+detached_on_path: on a broken path, was a security group detached since $since from the dependency's host or from its target? (The other way a path breaks besides a removed rule.)
+
+Params: $from, $to, $since
+
+```cypher
+MATCH (x:Service {rid: $from})-[:RUNS_ON]->(h:Compute)
+MATCH (x)-[:DEPENDS_ON]->(y:Resource {rid: $to})
+MATCH (fw:Firewall)-[p:PROTECTS]->(n:Resource)
+WHERE (n = h OR n = y) AND p.active = false AND p.removed_at >= $since
+RETURN fw.rid AS firewall, n.rid AS target, labels(n) AS target_kinds, p.removed_at AS removed_at
+ORDER BY removed_at DESC
+```
+
+### q24_changes_since
+
+changes_since: every change anywhere in the estate since $since, newest first: the "what changed in the account" feed, and the agent's tool to search for a change it hasn't been shown.
+
+Params: $since, $limit
+
+```cypher
+MATCH (ch:Change)
+WHERE ch.at >= $since
+OPTIONAL MATCH (ch)-[:MODIFIED]->(r:Resource)
+WITH ch, collect(r.rid) AS resources, collect(coalesce(r.name, r.rid)) AS names
+RETURN ch.event_id AS event_id, ch.at AS at, ch.source AS source, ch.event_name AS event_name, ch.actor AS actor,
+       ch.by_agent AS by_agent, ch.before AS before, ch.after AS after, resources, names
+ORDER BY at DESC
+LIMIT $limit
+```
+
+### q25_active_firewalls_of
+
+active_firewalls_of: the security groups currently attached to an instance or database (reattach_security_group sends the full list back to AWS).
+
+Params: $rid
+
+```cypher
+MATCH (fw:Firewall)-[p:PROTECTS]->(:Resource {rid: $rid})
+WHERE coalesce(p.active, true)
+RETURN fw.rid AS firewall
+ORDER BY firewall
+```
+
+### q26_resource_state
+
+resource_state: an instance's or database's last discovered state.
+
+Params: $rid
+
+```cypher
+MATCH (r:Resource {rid: $rid})
+RETURN r.rid AS rid, labels(r) AS kinds, r.state AS state, r.status AS status, r.name AS name
+```
+
+### q27_detached_from
+
+detached_from: security groups detached from this resource since $since (precondition for reattach_security_group).
+
+Params: $rid, $since
+
+```cypher
+MATCH (fw:Firewall)-[p:PROTECTS]->(:Resource {rid: $rid})
+WHERE p.active = false AND p.removed_at >= $since
+RETURN fw.rid AS firewall, p.removed_at AS removed_at
+ORDER BY removed_at DESC
 ```
 
 ## Write queries (ingestion, investigation, memory)
@@ -789,6 +873,75 @@ Params: $id, $tokens_in, $tokens_out, $agent_calls
 ```cypher
 MATCH (i:Incident {id: $id})
 SET i.tokens_in = $tokens_in, i.tokens_out = $tokens_out, i.agent_calls = $agent_calls
+```
+
+### w7a_clear_suspects
+
+drop an incident's previous scorecard before writing a new one (a re-investigation replaces it).
+
+Params: $id
+
+```cypher
+MATCH (:Incident {id: $id})-[s:SUSPECTS]->()
+DELETE s
+```
+
+### w24_diff_detached
+
+graph diff: a security group still recorded as attached to an instance/database seen in this sync, but no longer attached in AWS, was detached. Keep the edge (inactive, with the time) and record a Change.
+
+Params: $sync_ts
+
+```cypher
+MATCH (f:Firewall)-[p:PROTECTS]->(t:Resource)
+WHERE coalesce(p.active, true) AND p.source = 'aws_api' AND p.last_seen < $sync_ts AND t.last_seen = $sync_ts
+SET p.active = false, p.removed_at = $sync_ts
+CREATE (ch:Change {event_id: 'diff:detach:' + f.rid + ':' + t.rid + ':' + toString($sync_ts), source: 'graph_diff',
+                   event_name: 'SecurityGroupDetached', at: $sync_ts, before: f.rid + ' attached to ' + t.rid,
+                   after: f.rid + ' detached'})
+CREATE (ch)-[:MODIFIED]->(t)
+CREATE (ch)-[:MODIFIED]->(f)
+RETURN f.rid AS firewall, t.rid AS target
+```
+
+### w25_state_change
+
+graph diff, before W13/W14 overwrite it: an instance or database whose state changed since the last sync (e.g. running -> stopped) gets a Change.
+
+Params: $rid, $state, $sync_ts
+
+```cypher
+MATCH (r:Resource {rid: $rid})
+WHERE r.state IS NOT NULL AND r.state <> $state AND r.state <> 'missing'
+CREATE (ch:Change {event_id: 'diff:state:' + $rid + ':' + toString($sync_ts), source: 'graph_diff',
+                   event_name: 'InstanceStateChanged', at: $sync_ts, before: r.state, after: $state})
+CREATE (ch)-[:MODIFIED]->(r)
+RETURN r.state AS before
+```
+
+### w26_set_state
+
+set an instance's state (sandbox executor for start_instance; discovery overwrites it on live).
+
+Params: $rid, $state
+
+```cypher
+MATCH (r:Resource {rid: $rid})
+SET r.state = $state
+RETURN r.rid AS rid
+```
+
+### w27_set_protects
+
+(re)attach or detach a security group in the graph (sandbox executor + sandbox fault injection).
+
+Params: $fw, $target, $active, $ts
+
+```cypher
+MATCH (f:Firewall {rid: $fw}), (t:Resource {rid: $target})
+MERGE (f)-[p:PROTECTS]->(t)
+SET p.active = $active, p.removed_at = CASE WHEN $active THEN null ELSE $ts END
+RETURN f.rid AS firewall
 ```
 
 # Known limitations

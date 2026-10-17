@@ -58,7 +58,7 @@ def service_def(name, addr_of, image_build, ports_published):
                      for k, t, target in deps)
     d = {**image_build, "container_name": name,  # the restart executor runs `docker start <name>`
          "environment": {"SERVICE_RID": f"svc:{name}", "PORT": str(port), "DEPS": dep_s},
-         "restart": "no"}  # no restart policy: a stopped service stays down (S3)
+         "restart": "unless-stopped"}  # a `docker stop` stays down (S3); a host reboot or start brings it back (S7)
     if ports_published:
         d["ports"] = [f"0.0.0.0:{port}:{port}"]
     return d

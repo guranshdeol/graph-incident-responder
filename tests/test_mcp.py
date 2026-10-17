@@ -12,7 +12,7 @@ import pytest
 from graph import db
 
 EXPECTED = {"resolve", "correlate_alerts", "check_path", "removed_rules", "recent_changes", "blast_radius",
-            "path_between", "dependencies", "recall_incidents", "load_bearing"}
+            "path_between", "dependencies", "recall_incidents", "load_bearing", "changes_since", "detached_on_path"}
 
 
 @pytest.fixture

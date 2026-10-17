@@ -16,15 +16,34 @@ Two pages, same UI:
 5. Click **S4 Repeat of S1 (memory)** → the root cause card says "Seen before in INC-…", sg-db scores +1, and the fix card says "the same fix resolved INC-… in N s".
 6. Try **S5 Two faults at once** → "Multiple likely causes" banner and one proposal per cause. **Reset sandbox** starts over.
 
-## 2. Live AWS (5 minutes, operator token)
+## 2. Live AWS: break it by hand (operator token)
 
-1. Open https://172-232-86-149.sslip.io/live/ and paste the operator token into the field in the top bar (it is remembered in that browser).
-2. You'll see the real past incidents (resolved ones are the live memory).
-3. Click **LIVE Break it for real: revoke rule A** and confirm. A revoke-only IAM user (`rootgraph-chaos`) removes the rule that lets host-1 reach the RDS database; it is the "human who makes the bad change". The button refuses while an incident is open, and allows one fault per 5 minutes.
-4. Within ~40 s a new incident appears (real Prometheus/Alertmanager alerts). Click it. It says "Investigating…" until the whole alert group is in and the LLM has checked it (~1 minute).
-5. Check: root cause = the db security group (`sg-09a1…`), host-1 healthy at 1.0, "Seen before in INC-…" (memory from earlier runs), and the proposed fix restoring the exact removed rule.
-6. Type your name and click **Approve and execute**. The scoped executor re-adds the rule on AWS; the page turns **resolved** when the alerts clear and the checks pass (usually 1–2 minutes).
-7. If anything gets stuck, put the rule back by hand from the server: `AWS_PROFILE=rootgraph-admin uv run python -m demo.faults.restore_all`.
+The point: nobody tells rootgraph what was changed. Someone changes the real AWS account the way people
+really do (console click, CLI, `docker stop`), and rootgraph has to find **that** change on its own:
+CloudTrail and the discovery diff land in the graph, alerts arrive from Prometheus, and the agent works
+out which change explains them.
+
+1. Open https://172-232-86-149.sslip.io/live/ and paste the operator token into the top bar (remembered in that browser).
+2. Keep the page open. The left column, **What changed in the account**, lists every change from CloudTrail and discovery in the last 3 hours, with who made it.
+3. Make **one** change in the AWS console (account 360908956947, region **Sydney ap-southeast-2**). Pick any:
+
+| Fault | Where in the console | What rootgraph should conclude | Its fix |
+|---|---|---|---|
+| Edit a rule | EC2 → Security Groups → `rootgraph-db` → Inbound rules → Edit: change the 5432 rule whose source is `rootgraph-host1` to **5433** → Save | root cause `rootgraph-db`; "rule edited 5432 → 5433" | put the rule back to 5432 |
+| Delete a rule | same screen, delete that 5432 rule | root cause `rootgraph-db`; the exact removed rule | re-add that rule |
+| Detach a security group | RDS → `orders-db` → Modify → Security groups: remove `rootgraph-db`, add `default` → Apply immediately | root cause `orders-db`; "security group detached" | re-attach `rootgraph-db` |
+| Stop a server | EC2 → Instances → `rootgraph-host2` → Instance state → Stop. (**Never host-1**: it runs Prometheus.) | root cause host-2, stopped; its services are victims, not causes | start the instance |
+| Stop a container | On a host: `docker stop payments` (or from the server, see below) | root cause `payments`; it is down, not a network fault | `docker start payments` |
+
+   To stop a container from the server: `cd /opt/rootgraph/app && AWS_PROFILE=rootgraph-admin uv run python -c "import boto3,json;st=json.load(open('demo/aws/state.json'));boto3.client('ssm','ap-southeast-2').send_command(InstanceIds=[st['host1']],DocumentName='AWS-RunShellScript',Parameters={'commands':['docker stop payments']})"`
+
+4. Within 1–3 minutes the change appears under **What changed** (CloudTrail takes 1–3 min; discovery polls every 60 s) and a new incident opens from the real alerts. Click it.
+5. Read the **What happened** timeline (change → alerts → root cause), then the root-cause card, the scorecard and the tool trace. The proposed fix undoes exactly the change you made.
+6. Type your name and click **Approve and execute**. rootgraph's executor can only undo (re-add a rule, revert an edit, re-attach a group, start an instance, start a container). The page turns **resolved** once the alerts clear and the checks pass: 1–2 minutes for rules and containers, 2–5 minutes for RDS and a stopped server.
+7. Backup if no console is handy: the **BACKUP Break it for me** button deletes rule A with a revoke-only IAM user. It refuses while an incident is open and allows one fault per 5 minutes.
+8. If anything gets stuck, put everything back from the server: `AWS_PROFILE=rootgraph-admin uv run python -m demo.faults.restore_all` (undoes all of the above; safe to run any time).
+
+One change at a time; let each incident resolve before the next.
 
 ## 3. Under the hood (optional, server)
 
