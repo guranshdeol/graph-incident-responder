@@ -118,3 +118,12 @@ One line per non-obvious choice (plan §15.4). Newest at the bottom.
 
 - `LLM_MODEL` gains `nvidia/nemotron-3.5-super-vl:free` (tool calling supported, 1M context) after Ultra and Super: Ultra → Super → 3.5 Super VL.
 - **Fallbacks don't help with the daily cap:** OpenRouter's free tier allows 50 free-model requests per day per account, across all free models (`free-models-per-day`, 429). Once it's spent, every model in the list is refused and the report falls back to the template explanation (the deterministic diagnosis and fix are unaffected). The cap resets at 00:00 UTC (05:30 IST). Adding $10 of credits raises it to 1000/day.
+
+## Site redesign: dark glass (Sat 17 Oct 2026, ~17:30 IST)
+
+- **Design:** `docs/DESIGN.md` is now the team's third reference ("frosted glass cathedral at midnight"): midnight canvas, blueprint grid, spotlight, glass cards, Space Grotesk / Inter / JetBrains Mono, violet only for the primary action. Ember and teal (secondary accents in the spec) carry broken/healthy status only.
+- **Easier to follow for judges:** scenario cards grouped (network / compute / memory) with what breaks and what to look for, S1 marked "Start here"; an incident progress bar (alerts → investigated → fix proposed → approved → verified); a one-sentence plain-language cause above the full evidence; names (host-1, orders-db) instead of raw AWS ids everywhere, ids kept small underneath; the AI-unavailable case explained in words instead of the raw 429.
+- **More interactive:** graph view toggle (this incident / whole estate) and click-a-node to see its score and evidence; removed-rule history no longer piles up in the graph (only the rule this incident blames is drawn); tool-trace filters (all / chosen by the AI / not in graph) with the first 8 steps shown; score bars in the scorecard.
+- **New sections:** hero stats, How it works (6 steps), Why a graph, Proven on real AWS (the hand-made fault results), safety notes, footer with tracks. Live mode swaps the scenarios for "change it by hand" cards plus the backup button.
+- **Fixes from the review:** the change feed shows the last 24 h (an empty "last 3 hours" told visitors nothing) and is labelled for the sandbox; the phone layout no longer scrolls sideways (the spotlight glow was 720 px wide); `[hidden]` now beats button display rules.
+- The video's S14 stills were captured from the old design; recapture them before the final render (`film/shoot_live.py`; element ids are unchanged).

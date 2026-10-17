@@ -3,254 +3,491 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="color-scheme" content="light">
+<meta name="color-scheme" content="dark">
 <title>rootgraph</title>
+<meta name="description" content="rootgraph: many alerts, one cause. A FalkorDB graph of your infrastructure finds the change behind an incident and proposes the exact undo, which a person approves.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,400&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.30.2/cytoscape.min.js"></script>
 <style>
-/* Design tokens from docs/DESIGN.md ("warm paper notebook under afternoon sun").
-   NotionInter -> Inter, Lyon Text -> Source Serif 4 (the substitutes it names).
-   Blue is the single primary action; accent hues live on pills and one dark card. */
+/* Design tokens from docs/DESIGN.md ("frosted glass cathedral at midnight").
+   Untitled Sans -> Inter, aeonikPro -> Space Grotesk, dotDigital -> JetBrains Mono (the substitutes it names).
+   Violet is the single primary action. Ember marks what is broken, teal what is healthy: the two
+   secondary accents the system allows, used only for status. */
 :root {
-  --canvas: #f6f5f4; --card: #ffffff; --hair: rgba(0,0,0,.08);
-  --ink: #000000; --ink95: rgba(0,0,0,.95); --ink60: rgba(0,0,0,.6); --ink40: rgba(0,0,0,.4);
-  --graphite: #615d59; --stone: #757575;
-  --blue: #0075de; --sky-tint: #e6f3fe; --sky-wash: #62aef0;
-  --marigold: #ffb110; --coral: #f64932; --peach: #f6d5b8; --midnight: #02093a;
-  --sans: "Inter", "NotionInter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --serif: "Source Serif 4", "Lyon Text", Georgia, serif;
-  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  --r-card: 12px; --r-btn: 8px; --r-small: 4px; --r-pill: 9999px;
+  --canvas: #05060f; --steel: #2f343e;
+  --ice: #d8ecf8; --frost: #d1e4fa; --mist: #c7d3ea; --fog: #9da7ba;
+  --skywash: linear-gradient(180deg, #d8ecf8 0%, #98c0ef 100%);
+  --violet: #663af3; --violet-hi: #7a52f5; --blueprint: #b6d9fc;
+  --ember: #e46d4c; --teal: #269684; --amber: #e2b55b;
+  --edge: rgba(186,215,247,.12); --edge-hi: rgba(186,215,247,.24); --wash: rgba(186,214,247,.06); --wash-hi: rgba(186,214,247,.12);
+  --glass: rgba(186,214,247,.03); --tint: rgba(199,211,234,.12);
+  --card-shadow: inset 0 1px 1px rgba(199,211,234,.12), inset 0 24px 48px rgba(199,211,234,.05), 0 24px 32px rgba(6,6,14,.7);
+  --modal-shadow: inset 0 1px 1px rgba(216,236,248,.2), inset 0 24px 48px rgba(168,216,245,.06), 0 16px 32px rgba(0,0,0,.3);
+  --sans: "Inter", "Untitled Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --display: "Space Grotesk", "aeonikPro", ui-sans-serif, system-ui, sans-serif;
+  --mono: "JetBrains Mono", "dotDigital", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --r-card: 16px; --r-badge: 6px; --r-pill: 999px;
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { scroll-behavior: smooth; overflow-x: clip; }
+section, header, #app, #incident { scroll-margin-top: 80px; }
 html, body { background: var(--canvas); }
-body { margin: 0; color: var(--ink95); font: 400 16px/1.5 var(--sans); font-feature-settings: "lnum"; -webkit-font-smoothing: antialiased; }
-.wrap { max-width: 1240px; margin: 0 auto; padding: 0 24px; }
+body { margin: 0; color: var(--frost); font: 400 16px/1.5 var(--sans); letter-spacing: -0.01em; -webkit-font-smoothing: antialiased; overflow-x: hidden; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } *, *::before { animation: none !important; transition: none !important; } }
+
+/* ambient: blueprint grid + spotlight */
+.atmos { position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background-image: linear-gradient(rgba(186,215,247,.05) 1px, transparent 1px), linear-gradient(90deg, rgba(186,215,247,.05) 1px, transparent 1px);
+  background-size: 88px 88px; -webkit-mask-image: radial-gradient(ellipse 80% 70% at 50% 20%, #000 30%, transparent 85%); mask-image: radial-gradient(ellipse 80% 70% at 50% 20%, #000 30%, transparent 85%); }
+.spot { position: absolute; left: 0; right: 0; top: 0; height: 760px; z-index: -1; pointer-events: none; overflow: hidden;
+  background: conic-gradient(from 180deg at 50% -8%, transparent 44%, rgba(124,145,182,.22) 48.5%, rgba(124,145,182,.42) 50%, rgba(124,145,182,.22) 51.5%, transparent 56%);
+  -webkit-mask-image: linear-gradient(#000 20%, transparent 95%); mask-image: linear-gradient(#000 20%, transparent 95%); }
+.spot::after { content: ""; position: absolute; left: 50%; top: 120px; width: min(720px, 100%); height: 380px; transform: translateX(-50%);
+  background: radial-gradient(closest-side, rgba(102,58,243,.16), transparent); filter: blur(10px); }
+
+.wrap { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
 @media (max-width: 640px) { .wrap { padding: 0 16px; } }
 button, input { font-family: inherit; }
-* { transition: background-color .2s ease, color .2s ease, border-color .2s ease; }
+a { color: var(--frost); }
 
-/* nav: 64px, sticky, the one place with a whisper of shadow */
-nav { position: sticky; top: 0; z-index: 10; background: var(--canvas); box-shadow: 0 .7px 1.462px rgba(0,0,0,.015), 0 3px 9px rgba(0,0,0,.03); }
-nav .wrap { height: 64px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
-.logo { font-weight: 700; font-size: 20px; letter-spacing: -0.02em; color: var(--ink); display: flex; align-items: center; gap: 8px; }
-.logo .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--coral); box-shadow: 14px 0 0 var(--marigold), 28px 0 0 var(--sky-wash); margin-right: 30px; }
-nav .right { display: flex; align-items: center; gap: 4px; }
-.navlink { color: var(--ink60); text-decoration: none; font-size: 15px; font-weight: 500; padding: 10px 14px; border-radius: var(--r-btn); }
-.navlink:hover { color: var(--ink); }
+/* nav */
+nav { position: sticky; top: 0; z-index: 20; background: rgba(5,6,15,.72); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); box-shadow: 0 1px 0 var(--edge); }
+nav .wrap { height: 64px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.logo { font: 500 18px var(--display); color: var(--frost); display: flex; align-items: center; gap: 10px; text-decoration: none; letter-spacing: 0; }
+.logo svg { width: 22px; height: 22px; }
+nav .right { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.navlinks { display: flex; gap: 2px; }
+.navlink { color: var(--fog); text-decoration: none; font-size: 14px; font-weight: 500; padding: 8px 12px; border-radius: var(--r-pill); white-space: nowrap; }
+.navlink:hover { color: var(--frost); background: var(--wash); }
+@media (max-width: 760px) { .navlinks { display: none; } }
 
-/* hero: centered stack, headline with a highlight pill */
-.hero { text-align: center; padding: 72px 0 40px; }
-.hero h1 { font-weight: 700; font-size: clamp(40px, 6.2vw, 72px); line-height: 1.12; letter-spacing: -0.028em; color: var(--ink); margin: 0 auto; max-width: 980px; }
-.hl { display: inline-block; background: var(--peach); border-radius: var(--r-pill); padding: 0 .32em .04em; line-height: 1.1; }
-.hero .sub { font: 400 18px/1.56 var(--serif); color: var(--graphite); max-width: 680px; margin: 22px auto 30px; }
-.ctas { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
-.hero .note { font-size: 14px; color: var(--ink60); margin: 18px 0 0; }
+/* buttons: every interactive element is a pill */
+button, .btn { font-size: 14px; font-weight: 500; border-radius: var(--r-pill); padding: 8px 16px; cursor: pointer; border: 0; line-height: 1.43;
+  background: var(--wash); color: #fff; box-shadow: inset 0 0 0 1px var(--edge); text-decoration: none; display: inline-flex; align-items: center; gap: 8px;
+  transition: background-color .2s ease, box-shadow .2s ease, transform .2s ease; }
+button:hover, .btn:hover { background: var(--wash-hi); }
+button.primary, .btn.primary { background: var(--violet); box-shadow: 0 0 0 1px rgba(255,255,255,.08) inset, 0 8px 24px rgba(102,58,243,.35); padding: 10px 20px; }
+button.primary:hover, .btn.primary:hover { background: var(--violet-hi); transform: translateY(-1px); }
+button.outline, .btn.outline { background: transparent; color: var(--frost); }
+button.small { padding: 4px 12px; font-size: 13px; }
+button:disabled { opacity: .45; cursor: default; transform: none; }
+:focus-visible { outline: 2px solid var(--blueprint); outline-offset: 2px; }
 
-/* buttons: 8px radius; blue filled = the one primary action */
-button { font-size: 14px; font-weight: 500; border-radius: var(--r-btn); padding: 7px 15px; cursor: pointer; border: 0; background: transparent; color: var(--ink95); line-height: 1.43; }
-button.primary { background: var(--blue); color: #fff; }
-button.primary:hover { background: #005fb8; }
-button.ghost { background: var(--sky-tint); color: var(--blue); }
-button.ghost:hover { background: #d4eafd; }
-button.text:hover { background: rgba(0,0,0,.05); }
-button.outline { border: 1px solid rgba(0,0,0,.9); border-radius: var(--r-small); padding: 4px 10px; }
-button:disabled { opacity: .45; cursor: default; }
-button .k { font-weight: 700; margin-right: 6px; }
+/* type */
+.eyebrow { font: 400 13px/1.2 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--mist); margin: 0 0 14px; font-feature-settings: "tnum"; }
+.eyebrow.center { display: flex; align-items: center; justify-content: center; gap: 16px; }
+.eyebrow.center::before, .eyebrow.center::after { content: ""; height: 1px; width: 72px; background: linear-gradient(90deg, transparent, var(--edge-hi)); }
+.eyebrow.center::after { transform: scaleX(-1); }
+.sky { background: var(--skywash); -webkit-background-clip: text; background-clip: text; color: transparent; }
+h2.section { font: 500 clamp(32px, 4.4vw, 44px)/1.16 var(--display); margin: 0 auto 12px; text-align: center; max-width: 820px; }
+.lede { font-size: 18px; line-height: 1.5; color: var(--mist); max-width: 640px; margin: 0 auto; text-align: center; }
+.meta { font-size: 14px; color: var(--fog); }
+.fine { font-size: 13px; color: var(--fog); margin: 14px 0 0; }
+code, pre { font-family: var(--mono); font-size: 12.5px; }
+
+/* hero */
+.hero { text-align: center; padding: 88px 0 56px; position: relative; }
+.hero h1 { font: 500 clamp(44px, 7.4vw, 92px)/1.06 var(--display); margin: 0 auto; max-width: 1000px; letter-spacing: -0.02em; }
+.hero h1 .glow { text-shadow: 0 0 6px rgba(186,207,247,.25), 0 0 28px rgba(238,186,247,.12); }
+.hero .sub { font-size: 19px; line-height: 1.55; color: var(--mist); max-width: 680px; margin: 24px auto 32px; }
+.ctas { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
+.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; max-width: 920px; margin: 48px auto 0; }
+.stat { padding: 16px 12px; border-radius: var(--r-card); background: var(--glass); box-shadow: var(--card-shadow); }
+.stat b { display: block; font: 500 28px/1.1 var(--display); color: var(--ice); }
+.stat span { font-size: 13px; color: var(--fog); }
+@media (max-width: 760px) { .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* sections */
+section.block { padding: 96px 0 0; }
+@media (max-width: 640px) { section.block { padding-top: 72px; } }
+
+/* glass cards */
+.card { background: var(--glass); border-radius: var(--r-card); padding: 24px; min-width: 0; box-shadow: var(--card-shadow); }
+.card.lift { transition: transform .25s ease, box-shadow .25s ease, background-color .25s ease; }
+.card.lift:hover { transform: translateY(-2px); background: rgba(186,214,247,.05); }
+.stack > * + * { margin-top: 16px; }
+h2.title { font: 500 24px/1.17 var(--display); color: var(--ice); margin: 0 0 6px; }
+.intro { color: var(--fog); margin: 0 0 18px; font-size: 15px; }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+/* scenario picker */
+.groups { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 40px; }
+@media (max-width: 920px) { .groups { grid-template-columns: minmax(0, 1fr); } }
+.group h3 { font: 400 12px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--fog); margin: 0 0 10px 4px; }
+.scen { display: block; width: 100%; text-align: left; border-radius: var(--r-card); padding: 16px 18px; background: var(--glass); box-shadow: var(--card-shadow); color: var(--frost); cursor: pointer; margin-bottom: 10px; position: relative; font-weight: 400; }
+.scen:hover { background: rgba(186,214,247,.06); transform: translateY(-2px); }
+.scen .tag { font: 500 12px var(--mono); color: var(--blueprint); margin-right: 8px; }
+.scen .name { font: 500 17px/1.3 var(--display); color: var(--ice); }
+.scen .what { display: block; font-size: 14px; color: var(--mist); margin-top: 6px; line-height: 1.45; }
+.scen .look { display: block; font-size: 13px; color: var(--fog); margin-top: 6px; }
+.scen .start { position: absolute; top: 14px; right: 14px; font: 500 11px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: #fff; background: var(--violet); padding: 3px 8px; border-radius: var(--r-badge); }
+.scen.first .name { padding-right: 96px; }
+.scen.first { box-shadow: var(--card-shadow), inset 0 0 0 1px rgba(102,58,243,.6); }
+.scen[aria-busy="true"] { opacity: .6; }
+.note { text-align: center; margin: 24px 0 0; font-size: 14px; color: var(--fog); display: flex; gap: 10px; justify-content: center; align-items: center; flex-wrap: wrap; }
+.handlist { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-top: 36px; }
+.handlist .card h4 { font: 500 16px var(--display); color: var(--ice); margin: 0 0 6px; }
+.handlist .card p { margin: 0; font-size: 14px; color: var(--mist); }
+.handlist .card small { display: block; margin-top: 8px; color: var(--fog); font-size: 12.5px; }
 
 /* product surface */
-.app { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 16px; padding: 24px 0 80px; align-items: start; }
-@media (max-width: 920px) { .app { grid-template-columns: minmax(0, 1fr); } }
-.card { background: var(--card); border: 1px solid var(--hair); border-radius: var(--r-card); padding: 24px; min-width: 0; }
-.stack > * + * { margin-top: 16px; }
-.eyebrow { font-size: 12px; letter-spacing: .01em; color: var(--ink40); text-transform: uppercase; font-weight: 600; margin: 0 0 12px; }
-h2.title { font-weight: 700; font-size: 22px; line-height: 1.27; letter-spacing: -0.011em; color: var(--ink); margin: 0 0 16px; }
-.intro { font: 400 16px/1.5 var(--serif); color: var(--graphite); margin: -8px 0 16px; }
-.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-.meta { font-size: 14px; color: var(--ink60); }
+.app { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 16px; padding-top: 40px; align-items: start; }
+@media (max-width: 960px) { .app { grid-template-columns: minmax(0, 1fr); } }
+aside .card + .card { margin-top: 16px; }
+.incidents { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; max-height: 460px; overflow-y: auto; }
+.incidents li { padding: 10px 12px; border-radius: 10px; cursor: pointer; display: grid; gap: 4px; background: var(--wash); box-shadow: inset 0 0 0 1px var(--edge); transition: background-color .2s ease; }
+.incidents li:hover { background: var(--wash-hi); }
+.incidents li.sel { box-shadow: inset 0 0 0 1px rgba(102,58,243,.8), 0 0 18px rgba(102,58,243,.25); }
+.incidents .id { font-family: var(--mono); font-size: 13px; color: var(--ice); }
+.incidents li.none { cursor: default; color: var(--fog); font-size: 14px; background: transparent; }
 
-/* incidents list: kanban-style task cards */
-.incidents { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
-.incidents li { padding: 10px 12px; border-radius: var(--r-btn); border: 1px solid var(--hair); cursor: pointer; display: grid; gap: 4px; background: var(--card); }
-.incidents li:hover { background: #fbfaf9; }
-.incidents li.sel { border-color: var(--blue); box-shadow: inset 0 0 0 1px var(--blue); }
-.incidents .id { font-family: var(--mono); font-size: 13px; font-weight: 500; color: var(--ink); }
-.incidents li.none { border-style: dashed; cursor: default; color: var(--ink60); font-size: 14px; }
+/* badges */
+.pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 500; line-height: 1.33; padding: 3px 8px; border-radius: var(--r-badge); background: var(--tint); color: var(--frost); white-space: nowrap; }
+.pill.open { background: rgba(226,181,91,.16); color: #f1cf86; }
+.pill.open::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: #f1cf86; animation: pulse 1.6s ease-in-out infinite; }
+.pill.bad { background: rgba(228,109,76,.18); color: #f29a80; }
+.pill.warn { background: rgba(226,181,91,.14); color: #f1cf86; }
+.pill.good { background: rgba(38,150,132,.18); color: #6fd3c1; }
+.pill.done { background: rgba(38,150,132,.22); color: #8de3d4; }
+.pill.agent { background: rgba(102,58,243,.28); color: #d9ccff; }
+@keyframes pulse { 50% { opacity: .3; } }
 
-/* pill tags: colored fills carry status */
-.pill { display: inline-block; font-size: 12px; font-weight: 500; line-height: 1.33; padding: 3px 10px; border-radius: var(--r-pill); background: rgba(0,0,0,.06); color: var(--ink95); white-space: nowrap; }
-.pill.open { background: var(--marigold); color: #000; }
-.pill.bad { background: var(--coral); color: #fff; }
-.pill.warn { background: var(--peach); color: #000; }
-.pill.good { background: var(--sky-tint); color: var(--blue); }
-.pill.done { background: var(--blue); color: #fff; }
-.pill.agent { background: var(--midnight); color: #fff; }
-
-/* incident header */
+/* incident header + progress */
 .inc-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-.inc-head h1 { font-weight: 700; font-size: clamp(28px, 4vw, 40px); line-height: 1.2; letter-spacing: -0.03em; margin: 0; color: var(--ink); }
-.alerts { margin-top: 12px; }
+.inc-head h1 { font: 500 clamp(28px, 4vw, 40px)/1.16 var(--display); margin: 0; color: var(--ice); }
+.alerts { margin-top: 10px; color: var(--mist); font-size: 15px; }
+.alerts b { color: var(--ice); font-weight: 500; }
+.steps { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0; margin-top: 22px; position: relative; }
+.steps li { list-style: none; text-align: center; font-size: 13px; color: var(--fog); position: relative; padding-top: 30px; }
+.steps li::before { content: ""; position: absolute; top: 6px; left: 50%; transform: translateX(-50%); width: 14px; height: 14px; border-radius: 50%; background: var(--canvas); box-shadow: inset 0 0 0 1px var(--edge-hi); z-index: 1; }
+.steps li::after { content: ""; position: absolute; top: 12px; left: -50%; width: 100%; height: 2px; background: var(--edge); }
+.steps li:first-child::after { display: none; }
+.steps li.done { color: var(--frost); }
+.steps li.done::before { background: var(--teal); box-shadow: 0 0 10px rgba(38,150,132,.6); }
+.steps li.done::after { background: rgba(38,150,132,.6); }
+.steps li.now { color: var(--ice); font-weight: 500; }
+.steps li.now::before { background: var(--violet); box-shadow: 0 0 0 4px rgba(102,58,243,.25), 0 0 14px rgba(102,58,243,.7); animation: pulse 1.6s ease-in-out infinite; }
+.steps li.fail::before { background: var(--ember); }
+@media (max-width: 560px) { .steps li { font-size: 11px; } }
 
-/* root cause: the dark-mode island */
-.dark { background: var(--midnight); color: #fff; border-radius: var(--r-card); padding: 28px; }
-.dark .eyebrow { color: rgba(255,255,255,.55); }
-.dark .cause { font-weight: 700; font-size: clamp(28px, 4vw, 42px); line-height: 1.1; letter-spacing: -0.036em; margin: 0 0 14px; }
-.dark .cause .hl { background: var(--marigold); color: #000; }
-.dark .expl { font: 400 18px/1.56 var(--serif); color: rgba(255,255,255,.88); margin: 0; }
-.dark .multi { margin: 18px 0 0; padding: 12px 16px; background: var(--coral); border-radius: var(--r-btn); font-weight: 500; }
-.dark .foot { font-size: 13px; color: rgba(255,255,255,.55); margin-top: 16px; }
+/* root cause: the luminous plate */
+.cause-card { border-radius: var(--r-card); padding: 28px; background: rgba(5,6,15,.97); box-shadow: var(--modal-shadow), 0 0 0 1px rgba(102,58,243,.35), 0 0 60px rgba(102,58,243,.18); position: relative; overflow: hidden; }
+.cause-card::before { content: ""; position: absolute; inset: -40% -10% auto; height: 260px; background: radial-gradient(closest-side, rgba(102,58,243,.22), transparent); pointer-events: none; }
+.cause-card .cause { font: 500 clamp(30px, 4.6vw, 48px)/1.12 var(--display); margin: 0 0 4px; position: relative; overflow-wrap: anywhere; }
+.cause-card .rid { font: 400 13px var(--mono); color: var(--fog); margin: 0 0 16px; }
+.cause-card .plain { font-size: 18px; line-height: 1.55; color: var(--frost); margin: 0; position: relative; }
+.cause-card details { margin-top: 14px; color: var(--mist); font-size: 14px; }
+.cause-card details p { margin: 8px 0 0; line-height: 1.6; overflow-wrap: anywhere; }
+.multi { margin: 18px 0 0; padding: 12px 16px; background: rgba(228,109,76,.14); color: #f6b3a0; border-radius: 10px; box-shadow: inset 0 0 0 1px rgba(228,109,76,.35); font-weight: 500; }
+.cause-card .foot { font-size: 13px; color: var(--fog); margin-top: 18px; display: flex; gap: 6px 14px; flex-wrap: wrap; }
+details summary { cursor: pointer; color: var(--mist); }
+details summary:hover { color: var(--ice); }
+
+/* timeline */
+.timeline { list-style: none; margin: 0; padding: 0 0 0 4px; display: grid; gap: 0; }
+.timeline li { display: grid; grid-template-columns: 78px 16px minmax(0, 1fr); gap: 10px; font-size: 15px; align-items: baseline; padding: 6px 0; }
+.timeline .t { font: 400 12px var(--mono); color: var(--fog); }
+.timeline .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--steel); align-self: center; box-shadow: 0 0 0 3px var(--canvas); }
+.timeline li.ctx .txt { color: rgba(157,167,186,.6); }
+.timeline li.cause .txt { color: var(--ice); font-weight: 500; }
+.timeline li.cause .dot { background: var(--ember); box-shadow: 0 0 10px rgba(228,109,76,.8); }
+.timeline li.kalerts .txt { color: #f1cf86; }
+.timeline li.kalerts .dot { background: var(--amber); }
+.timeline li.kdecided .txt { color: var(--ice); font-weight: 600; }
+.timeline li.kdecided .dot { background: var(--violet); box-shadow: 0 0 10px rgba(102,58,243,.8); }
+.tag-cause { font-size: 11px; font-weight: 600; margin-left: 8px; padding: 2px 7px; border-radius: var(--r-badge); background: rgba(228,109,76,.2); color: #f29a80; vertical-align: 1px; }
+@media (max-width: 560px) { .timeline li { grid-template-columns: 64px 12px minmax(0, 1fr); font-size: 14px; } }
 
 /* proposed fix */
 .kv { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 8px 20px; margin: 16px 0 20px; font-size: 15px; }
-.kv dt { color: var(--ink60); }
-.kv dd { margin: 0; min-width: 0; overflow-wrap: anywhere; color: var(--ink95); }
-.action + .action { margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--hair); }
-.action h3 { font-weight: 700; font-size: 18px; margin: 0; letter-spacing: -0.01em; color: var(--ink); }
-input[type=text] { font-size: 15px; padding: 8px 12px; border-radius: var(--r-btn); border: 1px solid var(--hair); background: var(--canvas); color: var(--ink); width: 100%; max-width: 340px; }
-input::placeholder { color: var(--ink40); }
-input:focus { outline: 2px solid var(--sky-wash); outline-offset: 0; border-color: transparent; }
+.kv dt { color: var(--fog); }
+.kv dd { margin: 0; min-width: 0; overflow-wrap: anywhere; color: var(--frost); }
+.kv code { color: var(--blueprint); }
+.action + .action { margin-top: 20px; padding-top: 20px; box-shadow: 0 -1px 0 var(--edge); }
+.action h3 { font: 500 19px var(--display); margin: 0; color: var(--ice); text-transform: capitalize; }
+.action .why { margin: 10px 0 0; color: var(--mist); }
+input[type=text], input[type=password] { font-size: 15px; padding: 9px 12px; border-radius: var(--r-badge); border: 0; box-shadow: inset 0 0 0 1px var(--edge); background: rgba(199,211,234,.06); color: #fff; width: 100%; max-width: 340px; }
+input::placeholder { color: rgba(199,211,234,.6); }
+input:focus { outline: none; box-shadow: inset 0 0 0 1px var(--edge-hi), 0 0 0 3px rgba(102,58,243,.25); }
 
 /* graph */
-#cy { height: 440px; border-radius: var(--r-btn); background: var(--canvas); }
-.legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; color: var(--ink60); margin-top: 12px; }
-.legend i { display: inline-block; width: 20px; height: 0; border-top: 2px solid rgba(0,0,0,.7); vertical-align: middle; margin-right: 6px; }
+.graphbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.seg { display: inline-flex; padding: 3px; border-radius: var(--r-pill); background: var(--wash); box-shadow: inset 0 0 0 1px var(--edge); }
+.seg button { box-shadow: none; background: transparent; color: var(--fog); padding: 5px 14px; font-size: 13px; }
+.seg button[aria-pressed="true"] { background: var(--wash-hi); color: #fff; }
+#cy { height: 460px; border-radius: 12px; background: radial-gradient(ellipse at 50% 0%, rgba(124,145,182,.08), transparent 70%), rgba(5,6,15,.6); box-shadow: inset 0 0 0 1px var(--edge); }
+.nodeinfo { min-height: 22px; margin-top: 10px; font-size: 14px; color: var(--mist); }
+.nodeinfo b { color: var(--ice); font-weight: 500; }
+.legend { display: flex; gap: 8px 16px; flex-wrap: wrap; font-size: 13px; color: var(--fog); margin-top: 10px; }
+.legend i { display: inline-block; width: 20px; height: 0; border-top: 2px solid var(--mist); vertical-align: middle; margin-right: 6px; }
 .legend b { display: inline-block; width: 12px; height: 12px; border-radius: 50%; vertical-align: -1px; margin-right: 6px; }
 
 /* tables */
 .tablewrap { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; font-size: 14px; }
-th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--hair); vertical-align: top; }
-th { font-size: 12px; font-weight: 600; color: var(--ink40); text-transform: uppercase; letter-spacing: .01em; white-space: nowrap; }
+th, td { text-align: left; padding: 10px; box-shadow: inset 0 -1px 0 var(--edge); vertical-align: top; }
+th { font: 400 11px var(--mono); color: var(--fog); text-transform: uppercase; letter-spacing: .08em; white-space: nowrap; }
 td.num { font-variant-numeric: tabular-nums; text-align: right; }
-tr.top td { font-weight: 600; color: var(--ink); }
-#scorecard tr.main td { border-bottom: 0; padding-bottom: 2px; }
-#scorecard tr.ev td { padding-top: 0; font-size: 13px; }
-#trace td:nth-child(4) code { overflow-wrap: anywhere; }
+tr.top td { color: var(--ice); }
+#scorecard tr.main td { box-shadow: none; padding-bottom: 2px; }
+#scorecard tr.ev td { padding-top: 0; font-size: 13px; color: var(--fog); }
+.cand b { display: block; font-weight: 500; color: var(--ice); }
+.cand code { color: var(--fog); font-size: 11.5px; }
+.bar { height: 6px; border-radius: 3px; background: var(--wash-hi); margin-top: 6px; min-width: 80px; overflow: hidden; }
+.bar span { display: block; height: 100%; border-radius: 3px; background: linear-gradient(90deg, #98c0ef, #d8ecf8); }
+tr.top .bar span { background: linear-gradient(90deg, var(--violet), #b39bff); }
+#trace td:nth-child(4) code { overflow-wrap: anywhere; color: var(--mist); }
 #trace td:nth-child(4) { min-width: 180px; }
-code, pre { font-family: var(--mono); font-size: 12.5px; }
-pre { background: var(--canvas); border: 1px solid var(--hair); padding: 12px; border-radius: var(--r-btn); overflow-x: auto; white-space: pre-wrap; word-break: break-word; margin: 8px 0; }
-details summary { cursor: pointer; }
-.fine { font-size: 13px; color: var(--ink60); margin: 12px 0 0; }
-.empty { text-align: center; padding: 56px 24px; }
-.empty h2 { font-weight: 700; font-size: clamp(26px, 3.4vw, 40px); letter-spacing: -0.03em; line-height: 1.2; margin: 0 0 8px; color: var(--ink); }
-.empty p { font: 400 18px/1.56 var(--serif); color: var(--graphite); margin: 0; }
-.err { color: var(--coral); }
-.feed, .timeline { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
-.feed li { font-size: 13px; line-height: 1.4; padding: 8px 10px; border-radius: var(--r-btn); background: var(--canvas); }
-.feed .t, .timeline .t { font-family: var(--mono); font-size: 12px; color: var(--ink60); }
-.feed .who { font-size: 12px; color: var(--ink40); }
-.timeline li { display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 12px; font-size: 15px; align-items: baseline; }
-.timeline li.kchange span:last-child { color: var(--ink); }
-.timeline li.ctx span:last-child { color: var(--ink40); }
-.timeline li.cause span:last-child { font-weight: 600; }
-.timeline li.kalerts span:last-child { color: #b03a28; }
-.timeline li.kdecided span:last-child { font-weight: 700; }
+#trace code { color: var(--frost); }
+pre { background: rgba(5,6,15,.8); box-shadow: inset 0 0 0 1px var(--edge); color: var(--mist); padding: 12px; border-radius: 10px; overflow-x: auto; white-space: pre-wrap; word-break: break-word; margin: 8px 0; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+.chips button { padding: 5px 12px; font-size: 13px; color: var(--mist); }
+.chips button[aria-pressed="true"] { background: var(--wash-hi); color: #fff; box-shadow: inset 0 0 0 1px var(--edge-hi); }
+
+/* empty state */
+.empty { text-align: center; padding: 48px 24px; }
+.empty h2 { font: 500 clamp(26px, 3.4vw, 36px)/1.2 var(--display); margin: 0 0 8px; color: var(--ice); }
+.empty p { color: var(--mist); margin: 0 auto 22px; max-width: 520px; }
+.err { color: #f29a80; }
+
+/* feed */
+.feed { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; max-height: 420px; overflow-y: auto; }
+.feed li { font-size: 13px; line-height: 1.4; padding: 9px 11px; border-radius: 10px; background: var(--wash); color: var(--frost); }
+.feed .t { font: 400 11.5px var(--mono); color: var(--fog); }
+.feed .who { font-size: 12px; color: var(--fog); margin-top: 2px; }
+.feed li.agent { box-shadow: inset 2px 0 0 var(--teal); }
+.feed li.human { box-shadow: inset 2px 0 0 var(--ember); }
+
+/* how it works: icon-tile timeline */
+.flow { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; margin-top: 48px; position: relative; }
+.flow::before { content: ""; position: absolute; top: 32px; left: 8%; right: 8%; height: 1px; background: linear-gradient(90deg, transparent, var(--edge-hi), var(--edge-hi), transparent); }
+.flow > div { text-align: center; position: relative; }
+.tile { width: 64px; height: 64px; border-radius: 9999px; margin: 0 auto 14px; display: grid; place-items: center; background: #0a0c18; box-shadow: inset 0 0 0 1px var(--edge), inset 0 12px 24px rgba(168,216,245,.06), 0 0 24px rgba(124,145,182,.12); }
+.tile svg { width: 26px; height: 26px; stroke: var(--frost); fill: none; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.flow h4 { font: 500 16px var(--display); color: var(--ice); margin: 0 0 6px; }
+.flow p { font-size: 13.5px; color: var(--fog); margin: 0; line-height: 1.45; }
+@media (max-width: 920px) { .flow { grid-template-columns: repeat(3, minmax(0, 1fr)); row-gap: 32px; } .flow::before { display: none; } }
+@media (max-width: 520px) { .flow { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+.three { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 44px; }
+@media (max-width: 860px) { .three { grid-template-columns: minmax(0, 1fr); } }
+.three h4 { font: 500 19px var(--display); color: var(--ice); margin: 12px 0 8px; }
+.three p { margin: 0; color: var(--mist); font-size: 15px; }
+.three .tile { margin: 0; width: 48px; height: 48px; }
+.three .tile svg { width: 22px; height: 22px; }
+
+.results td { font-size: 15px; color: var(--frost); }
+.results td:last-child { font: 500 15px var(--mono); color: var(--ice); white-space: nowrap; }
+footer { margin-top: 120px; padding: 32px 0 48px; box-shadow: 0 -1px 0 var(--edge); color: var(--fog); font-size: 14px; }
+footer .wrap { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 </style>
 </head>
 <body>
+<div class="atmos" aria-hidden="true"></div>
+<div class="spot" aria-hidden="true"></div>
 
 <nav>
   <div class="wrap">
-    <div class="logo"><span class="dot" aria-hidden="true"></span>rootgraph</div>
+    <a class="logo" href="#top" aria-label="rootgraph home">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><defs><linearGradient id="lg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#d8ecf8"/><stop offset="1" stop-color="#98c0ef"/></linearGradient></defs>
+        <circle cx="12" cy="4" r="2.6" fill="url(#lg)"/><circle cx="5" cy="19" r="2.6" fill="url(#lg)"/><circle cx="19" cy="19" r="2.6" fill="url(#lg)"/>
+        <path d="M12 6.5 6 16.6M12 6.5l6 10.1M7.6 19h8.8" stroke="#98c0ef" stroke-width="1.4" fill="none"/></svg>
+      rootgraph</a>
     <div class="right">
-      <span id="tokenBox" hidden><input type="password" id="token" placeholder="Operator token" aria-label="Operator token" style="max-width:180px;padding:6px 10px;font-size:14px"></span>
-      <span class="navlink" id="mode"></span>
-      <a class="navlink" href="https://github.com/guranshdeol/graph-incident-responder" target="_blank" rel="noopener">GitHub</a>
+      <div class="navlinks">
+        <a class="navlink" href="#try">Try it</a>
+        <a class="navlink" href="#how">How it works</a>
+        <a class="navlink" href="#proof">Real AWS</a>
+      </div>
+      <span id="tokenBox" hidden><input type="password" id="token" placeholder="Operator token" aria-label="Operator token" style="max-width:170px;padding:6px 10px;font-size:13px"></span>
+      <a class="btn outline small" id="mode" href="#"></a>
+      <a class="btn outline small" href="https://github.com/guranshdeol/graph-incident-responder" target="_blank" rel="noopener">GitHub</a>
     </div>
   </div>
 </nav>
 
-<header class="hero">
+<header class="hero" id="top">
   <div class="wrap">
-    <h1>Many alerts, <span class="hl">one</span> cause.<br>The graph finds it.</h1>
-    <p class="sub">rootgraph walks a FalkorDB graph of your infrastructure upward from the symptoms, proves the cause with the network path and the change behind it, and proposes a fix that a human approves.</p>
-    <div class="ctas" id="scenarios"></div>
-    <p class="note" id="sandboxNote" hidden>Sandbox: a synthetic estate. Approving a fix only changes the graph. <button class="outline" id="resetBtn">Reset sandbox</button></p>
+    <p class="eyebrow center" id="heroEyebrow">Incident root cause · on a FalkorDB graph</p>
+    <h1 class="glow"><span class="sky">Many alerts.</span><br><span class="sky">One cause.</span></h1>
+    <p class="sub">When ten alerts fire at once, rootgraph walks a live graph of your infrastructure to find the one change behind them, proves it with the network path and who changed what, and proposes the exact undo. A person approves it; rootgraph checks it worked and remembers.</p>
+    <div class="ctas">
+      <button class="primary" id="heroGo">Run the first incident</button>
+      <a class="btn outline" href="#how">How it works</a>
+    </div>
+    <div class="stats">
+      <div class="stat"><b>8</b><span>scenarios to break</span></div>
+      <div class="stat"><b>12</b><span>read-only graph tools</span></div>
+      <div class="stat"><b>52–93 s</b><span>to fix hand-made faults on real AWS</span></div>
+      <div class="stat"><b>0</b><span>changes without a human's approval</span></div>
+    </div>
   </div>
 </header>
 
-<div class="wrap">
-  <div class="app">
-    <aside>
-      <div class="card">
-        <p class="eyebrow">Incidents</p>
-        <ul class="incidents" id="incidents"></ul>
-      </div>
-      <div class="card" style="margin-top:16px">
-        <p class="eyebrow">What changed in the account</p>
-        <p class="meta" style="margin:-6px 0 10px;font-size:13px">CloudTrail + discovery, live. Changes made by hand show up here.</p>
-        <ul class="feed" id="feed"></ul>
-      </div>
-    </aside>
+<section class="block" id="try">
+  <div class="wrap">
+    <p class="eyebrow center" id="tryEyebrow">Try it · sandbox</p>
+    <h2 class="section" id="tryTitle">Break something. Watch the graph find it.</h2>
+    <p class="lede" id="tryLede">Each scenario breaks a synthetic copy of our AWS estate. rootgraph gets only the alerts and has to work out the cause itself. Start with S1.</p>
+    <div class="groups" id="scenarios"></div>
+    <div class="note" id="sandboxNote" hidden><span>Sandbox: a synthetic estate. Approving a fix only changes the graph.</span><button class="outline small" id="resetBtn">Reset sandbox</button></div>
 
-    <main>
-      <div class="card empty" id="placeholder">
-        <h2>Pick a scenario above.</h2>
-        <p>Start with S1: a security-group rule is revoked and four alerts fire at once.</p>
-      </div>
-
-      <div id="incident" class="stack" hidden>
+    <div class="app" id="app">
+      <aside>
         <div class="card">
-          <div class="inc-head">
-            <h1 id="incId"></h1>
-            <span id="incStatus"></span>
-            <span id="incTtr" class="meta"></span>
+          <p class="eyebrow">Incidents</p>
+          <ul class="incidents" id="incidents"></ul>
+        </div>
+        <div class="card">
+          <p class="eyebrow" id="feedTitle">What changed</p>
+          <p class="meta" id="feedNote" style="margin:-6px 0 12px;font-size:13px"></p>
+          <ul class="feed" id="feed"></ul>
+        </div>
+      </aside>
+
+      <main>
+        <div class="card empty" id="placeholder">
+          <h2>No incident open.</h2>
+          <p id="placeholderText">Pick a scenario above. S1 is the classic: one firewall rule disappears and four services start failing at once.</p>
+          <button class="primary" id="placeholderGo">Run S1</button>
+        </div>
+
+        <div id="incident" class="stack" hidden>
+          <div class="card">
+            <div class="inc-head">
+              <h1 id="incId"></h1>
+              <span id="incStatus"></span>
+              <span id="incTtr" class="meta"></span>
+            </div>
+            <div class="alerts" id="alerts"></div>
+            <ol class="steps" id="steps"></ol>
           </div>
-          <div class="alerts row" id="alerts"></div>
-        </div>
 
-        <div class="card" id="whatCard" hidden>
-          <h2 class="title" style="margin-bottom:10px">What happened</h2>
-          <ol class="timeline" id="timeline"></ol>
-        </div>
-
-        <div class="dark">
-          <p class="eyebrow">Most likely root cause</p>
-          <p class="cause"><span class="hl" id="cause"></span></p>
-          <p class="expl" id="explanation"></p>
-          <p class="multi" id="multi" hidden></p>
-          <div class="foot"><span id="explainedBy"></span><span id="recall"></span></div>
-        </div>
-
-        <div class="card">
-          <h2 class="title">Proposed fix</h2>
-          <p class="intro">Nothing runs until a person approves it.</p>
-          <input type="text" id="actor" placeholder="Your name, recorded as the approver" aria-label="Approver name">
-          <div id="proposals" style="margin-top:20px"></div>
-        </div>
-
-        <div class="card">
-          <h2 class="title">Graph evidence</h2>
-          <div id="cy"></div>
-          <div class="legend">
-            <span><i></i>DEPENDS_ON</span>
-            <span><i style="border-top:1.5px dashed rgba(0,0,0,.35)"></i>RUNS_ON · PROTECTS</span>
-            <span><i style="border-top:1.5px dotted rgba(0,0,0,.3)"></i>ALLOWS_FROM</span>
-            <span><i style="border-top:3px solid var(--coral)"></i>broken path · removed rule</span>
-            <span><b style="background:#fff;box-shadow:inset 0 0 0 3px var(--ink)"></b>alerting</span>
-            <span><b style="background:var(--marigold)"></b>top suspect</span>
+          <div class="cause-card">
+            <p class="eyebrow">Most likely root cause</p>
+            <p class="cause"><span class="sky" id="cause"></span></p>
+            <p class="rid" id="causeRid"></p>
+            <p class="plain" id="plain"></p>
+            <p class="multi" id="multi" hidden></p>
+            <details id="explDetails"><summary>Full evidence</summary><p id="explanation"></p></details>
+            <div class="foot"><span id="explainedBy"></span><span id="recall"></span></div>
           </div>
-          <p class="fine">Drawn from the graph as it is now; rules restored since the incident show as active again.</p>
-        </div>
 
-        <div class="card">
-          <h2 class="title">Scorecard</h2>
-          <p class="intro">Every candidate the graph surfaced, scored on evidence.</p>
-          <div class="tablewrap"><table id="scorecard"></table></div>
-          <p class="fine">score = 3·coverage + 2·unhealthy − 2·healthy + 2·broken path + 2·change + 1·memory − 0.25·hops. Heuristic weights, tested on S1–S5.</p>
-        </div>
+          <div class="card" id="whatCard" hidden>
+            <h2 class="title">What happened</h2>
+            <p class="intro">Every change in the account around the incident. The one that caused it is marked.</p>
+            <ol class="timeline" id="timeline"></ol>
+          </div>
 
-        <div class="card">
-          <h2 class="title">Tool trace</h2>
-          <p class="intro">Every step is a fixed Cypher query or fixed PromQL. Open a row to see it.</p>
-          <div class="tablewrap"><table id="trace"></table></div>
+          <div class="card">
+            <h2 class="title">Proposed fix</h2>
+            <p class="intro">The exact undo of the change. Nothing runs until a person approves it.</p>
+            <input type="text" id="actor" placeholder="Your name, recorded as the approver" aria-label="Approver name">
+            <div id="proposals" style="margin-top:20px"></div>
+          </div>
+
+          <div class="card">
+            <div class="graphbar">
+              <h2 class="title" style="margin:0">Graph evidence</h2>
+              <div class="seg" role="group" aria-label="Graph view">
+                <button id="viewFocus" aria-pressed="true">This incident</button>
+                <button id="viewAll" aria-pressed="false">Whole estate</button>
+              </div>
+            </div>
+            <div id="cy"></div>
+            <div class="nodeinfo" id="nodeinfo">Click a node to see why it was or wasn't blamed.</div>
+            <div class="legend">
+              <span><i></i>depends on</span>
+              <span><i style="border-top:1.5px dashed var(--fog)"></i>runs on · protects</span>
+              <span><i style="border-top:3px solid var(--ember)"></i>broken path · the culprit rule</span>
+              <span><b style="background:transparent;box-shadow:inset 0 0 0 2px #f1cf86"></b>alerting</span>
+              <span><b style="background:var(--violet);box-shadow:0 0 8px var(--violet)"></b>root cause</span>
+            </div>
+          </div>
+
+          <div class="card">
+            <h2 class="title">Scorecard</h2>
+            <p class="intro">Every candidate the graph surfaced, scored on evidence. The busiest node is not always the guilty one.</p>
+            <div class="tablewrap"><table id="scorecard"></table></div>
+            <p class="fine">score = 3·coverage + 2·unhealthy − 2·healthy + 2·broken path + 2·change + 1·memory − 0.25·hops. Heuristic weights, tested on S1–S8.</p>
+          </div>
+
+          <div class="card">
+            <h2 class="title">Tool trace</h2>
+            <p class="intro">Every step is a fixed, human-written Cypher or PromQL query. The AI picks tools; it never writes queries. Open a row to see it.</p>
+            <div class="chips" id="traceChips"></div>
+            <div class="tablewrap"><table id="trace"></table></div>
+            <div style="margin-top:12px" id="traceMore"></div>
+          </div>
         </div>
-      </div>
-    </main>
+      </main>
+    </div>
   </div>
-</div>
+</section>
+
+<section class="block" id="how">
+  <div class="wrap">
+    <p class="eyebrow center">How it works</p>
+    <h2 class="section"><span class="sky">From alert storm to one approved fix</span></h2>
+    <p class="lede">Every step reads the same FalkorDB graph: services, hosts, databases, firewall rules, every change and every past incident.</p>
+    <div class="flow">
+      <div><div class="tile"><svg viewBox="0 0 24 24"><path d="M12 3 2 20h20L12 3z"/><path d="M12 10v4M12 17h.01"/></svg></div><h4>Alerts arrive</h4><p>Prometheus fires; Alertmanager groups them into one incident.</p></div>
+      <div><div class="tile"><svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/><path d="M11 7 6 17M13 7l5 10"/></svg></div><h4>Walk the graph</h4><p>Upward from every alert to what they share: the candidates.</p></div>
+      <div><div class="tile"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="m20 20-4.5-4.5"/></svg></div><h4>Gather evidence</h4><p>Is the network path open? Who changed what, when? Is it healthy?</p></div>
+      <div><div class="tile"><svg viewBox="0 0 24 24"><rect x="4" y="6" width="16" height="12" rx="3"/><path d="M9 11h.01M15 11h.01M9 15h6M12 3v3"/></svg></div><h4>AI double-checks</h4><p>An LLM calls the same read-only tools to test the ranking, then explains it.</p></div>
+      <div><div class="tile"><svg viewBox="0 0 24 24"><path d="M5 12.5 10 17l9-10"/></svg></div><h4>A person approves</h4><p>The exact undo, its blast radius and rollback. Nothing runs before that.</p></div>
+      <div><div class="tile"><svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4h4"/></svg></div><h4>Verify, remember</h4><p>Alerts must clear. The fix is saved; next time it is offered first.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="block" id="why">
+  <div class="wrap">
+    <p class="eyebrow center">Why a graph</p>
+    <h2 class="section">Logs show symptoms. <span class="sky">Relationships show causes.</span></h2>
+    <div class="three">
+      <div class="card lift"><div class="tile"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h10M4 17h6"/></svg></div>
+        <h4>Ten alerts, one ancestor</h4><p>Four services fail because they share one database path. Only the dependency graph shows they share it.</p></div>
+      <div class="card lift"><div class="tile"><svg viewBox="0 0 24 24"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></div>
+        <h4>The path is the proof</h4><p>"Is payments allowed to reach the database?" is a graph query over services, hosts and firewall rules, answered in milliseconds.</p></div>
+      <div class="card lift"><div class="tile"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg></div>
+        <h4>Changes and memory live in it</h4><p>Every CloudTrail change, every removed rule and every past fix are nodes too, so "what changed?" and "seen before?" are one hop away.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="block" id="proof">
+  <div class="wrap">
+    <p class="eyebrow center">Proven on real AWS</p>
+    <h2 class="section">We broke a real AWS account by hand.</h2>
+    <p class="lede">Nobody told rootgraph what changed. Measured from incident open to verified fix, with a person approving each one (17 Oct 2026, Sydney).</p>
+    <div class="card" style="margin-top:40px">
+      <div class="tablewrap"><table class="results">
+        <tr><th>Change made by hand</th><th>rootgraph's conclusion</th><th>Undo it proposed</th><th>Fixed in</th></tr>
+        <tr><td>Database security group detached in the RDS console</td><td>orders-db lost its security group; 12 alerts across both hosts</td><td>Re-attach the group</td><td>52 s</td></tr>
+        <tr><td>host-2 stopped in the EC2 console</td><td>host-2 went running → stopped; its services are victims</td><td>Start the instance</td><td>64 s</td></tr>
+        <tr><td><code>docker stop payments</code> on host-1</td><td>payments is down; the network is fine</td><td>Start the container</td><td>93 s</td></tr>
+        <tr><td>Firewall rule revoked</td><td>The exact rule that let host-1 reach the database</td><td>Re-add that rule</td><td>92 s</td></tr>
+        <tr><td>Firewall rule edited, port 5432 → 5433</td><td>"Rule edited", with the old and new values</td><td>Edit it back</td><td>verified</td></tr>
+      </table></div>
+    </div>
+    <div class="three">
+      <div class="card"><h4>Undo-only permissions</h4><p>The executor's IAM user can re-add rules, re-attach groups and start instances. It cannot delete or stop anything.</p></div>
+      <div class="card"><h4>No AI-written queries</h4><p>The model chooses among 12 fixed, reviewed Cypher queries and must give a reason for each call. A validator checks its answer.</p></div>
+      <div class="card"><h4>Honest when unsure</h4><p>Two causes close together? It says "multiple likely causes" and proposes a fix for each. Not modelled? It says so instead of guessing.</p></div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <span>rootgraph · WeMakeDevs × FalkorDB "Graph Hacks: Context for AI Agents" · Track 01 agents · Track 02 memory</span>
+    <span><a href="https://github.com/guranshdeol/graph-incident-responder" target="_blank" rel="noopener">Source on GitHub</a></span>
+  </div>
+</footer>
 
 <script>
 const $ = (id) => document.getElementById(id);
@@ -259,14 +496,16 @@ const el = (tag, attrs = {}, ...kids) => {
   for (const [k, v] of Object.entries(attrs)) {
     if (k === "class") n.className = v; else if (k.startsWith("on")) n.addEventListener(k.slice(2), v); else n.setAttribute(k, v);
   }
-  for (const k of kids.flat()) if (k != null) n.append(k instanceof Node ? k : String(k));
+  for (const k of kids.flat()) if (k != null && k !== false) n.append(k instanceof Node ? k : String(k));
   return n;
 };
 const fmtTime = (t) => t ? new Date(t * 1000).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }) : "";
 const store = { get(k) { try { return localStorage.getItem(k); } catch { return null; } },
                 set(k, v) { try { localStorage.setItem(k, v); } catch {} } };
 
-let current = null, cy = null, sandboxMode = true, pollTimer = null;
+let current = null, cy = null, sandboxMode = true, pollTimer = null, lastRep = null, graphView = "focus", traceFilter = "all", traceAll = false;
+let NAMES = {}, KINDS = {};
+const nm = (rid) => NAMES[rid] && NAMES[rid] !== rid ? NAMES[rid] : rid;
 
 async function api(path, opts = {}) {
   const headers = { "Content-Type": "application/json" };
@@ -277,9 +516,86 @@ async function api(path, opts = {}) {
   if (!r.ok) throw new Error(body.detail || r.statusText);
   return body;
 }
+let graphCache = null;
+async function loadGraph() {
+  graphCache = await api("api/graph");
+  NAMES = Object.fromEntries(graphCache.nodes.map(n => [n.rid, n.name || n.rid]));
+  KINDS = Object.fromEntries(graphCache.nodes.map(n => [n.rid, kindOf(n.kinds)]));
+  return graphCache;
+}
 
+/* ---------- scenarios ---------- */
+const SCEN = {
+  s1: ["A firewall rule is deleted: host-1 can no longer reach the database.", "Look for: the broken path, and host-1 scoring low because it is healthy."],
+  s6: ["A port typo: the database rule changes from 5432 to 5433.", "Look for: \"rule edited\" with old and new values, and an edit-back fix."],
+  s8: ["host-1's security group is detached from the instance.", "Look for: \"security group detached\" and a re-attach fix."],
+  s2: ["A CPU hog saturates host-2, slowing both services on it.", "Look for: the shared host winning on probe evidence."],
+  s3: ["The payments container stops. Not a network problem.", "Look for: a restart fix with its blast radius."],
+  s7: ["host-2 is stopped; everything on it goes dark.", "Look for: the host as the cause, its services as victims."],
+  s4: ["S1 happens again. rootgraph has seen this before.", "Look for: \"Seen before\" and the past fix pre-filled. Run S1 first."],
+  s5: ["Two faults at once: a rule deleted and a service down.", "Look for: \"Multiple likely causes\" and one fix for each."],
+};
+const GROUPS = [["Network changes", ["s1", "s6", "s8"]], ["Compute and services", ["s2", "s3", "s7"]], ["Memory and ambiguity", ["s4", "s5"]]];
+const HAND = [
+  ["Edit a rule", "EC2 → Security Groups → rootgraph-db → edit the 5432 rule from rootgraph-host1 to 5433.", "rootgraph proposes: edit it back."],
+  ["Delete a rule", "Same screen: delete that 5432 rule.", "rootgraph proposes: re-add the exact rule."],
+  ["Detach a security group", "RDS → orders-db → Modify: swap rootgraph-db for default, apply immediately.", "rootgraph proposes: re-attach rootgraph-db."],
+  ["Stop a server", "EC2 → Instances → rootgraph-host2 → Stop. (Never host-1: it runs Prometheus.)", "rootgraph proposes: start it."],
+  ["Stop a container", "On a host: docker stop payments.", "rootgraph proposes: start it, with the blast radius."],
+];
+
+async function inject(name, btn) {
+  if (btn) { btn.disabled = true; btn.setAttribute("aria-busy", "true"); }
+  try {
+    const r = await api(`api/scenarios/${name}/inject`, { method: "POST" });
+    await refreshList(); await openIncident(r.incident_id);
+    $("app").scrollIntoView({ behavior: "smooth", block: "start" });
+  } catch (err) { alert(err.message); }
+  finally { if (btn) { btn.disabled = false; btn.removeAttribute("aria-busy"); } }
+}
+
+async function loadScenarios() {
+  const data = await api("api/scenarios");
+  sandboxMode = data.sandbox;
+  $("tokenBox").hidden = data.sandbox;
+  $("mode").textContent = data.sandbox ? "Live AWS →" : "← Sandbox";
+  $("mode").href = data.sandbox ? "live/" : "../";
+  $("mode").title = data.sandbox ? "The real AWS estate (operator token needed)" : "The public sandbox";
+  $("sandboxNote").hidden = !data.sandbox;
+  if (!data.sandbox) {
+    $("heroEyebrow").textContent = "Live · real AWS account, Sydney";
+    $("tryEyebrow").textContent = "Live · real AWS";
+    $("tryTitle").textContent = "Change the real account by hand.";
+    $("tryLede").textContent = "Make one change in the AWS console (Sydney). It shows up under \"What changed\" within a minute or two, real alerts follow, and rootgraph finds it. Paste the operator token in the top bar first.";
+    $("heroGo").textContent = "See the incidents";
+    $("placeholderText").textContent = "Make one change from the list above in the AWS console, or use the backup button. The incident appears here within 1–3 minutes.";
+    $("placeholderGo").hidden = true;
+    const backup = el("button", { class: "outline", onclick: async (e) => {
+      if (!confirm("Revoke rule A on the real AWS estate? Real alerts will fire; rootgraph investigates and you approve the fix.")) return;
+      const b = e.currentTarget; b.disabled = true;
+      try { const r = await api("api/live/break", { method: "POST" }); alert(`Revoked ${r.revoked}. ${r.next}.`); }
+      catch (err) { alert(err.message); } finally { b.disabled = false; }
+    } }, "Backup: break it for me (revoke rule A)");
+    $("scenarios").replaceWith(el("div", { class: "handlist", id: "scenarios" },
+      ...HAND.map(([t, how, fix]) => el("div", { class: "card" }, el("h4", {}, t), el("p", {}, how), el("small", {}, fix)))));
+    $("sandboxNote").hidden = false;
+    $("sandboxNote").replaceChildren(el("span", {}, "One change at a time. No console handy?"), backup);
+    return;
+  }
+  const byName = Object.fromEntries(data.scenarios.map(s => [s.name, s]));
+  $("scenarios").replaceChildren(...GROUPS.map(([label, names]) => el("div", { class: "group" }, el("h3", {}, label),
+    ...names.filter(n => byName[n]).map(n => {
+      const [what, look] = SCEN[n] || ["", ""];
+      return el("button", { class: "scen" + (n === "s1" ? " first" : ""), onclick: (e) => inject(n, e.currentTarget) },
+        n === "s1" ? el("span", { class: "start" }, "Start here") : null,
+        el("span", { class: "tag" }, n.toUpperCase()), el("span", { class: "name" }, byName[n].title),
+        el("span", { class: "what" }, what), el("span", { class: "look" }, look));
+    }))));
+}
+
+/* ---------- change feed ---------- */
 const hhmmss = (t) => new Date(t * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-const who = (c) => c.by_agent ? "rootgraph" : c.actor ? c.actor.replace(/^arn:aws:[a-z]+::\d*:/, "").replace(/^assumed-role\//, "") : (c.source === "graph_diff" ? "discovery (graph diff)" : "unknown");
+const who = (c) => c.by_agent ? "rootgraph" : c.actor ? c.actor.replace(/^arn:aws:[a-z]+::\d*:/, "").replace(/^(user|assumed-role)\//, "") : (c.source === "graph_diff" ? "discovery" : "unknown");
 const said = (c) => c.source === "graph_diff" && !c.actor ? `discovery saw: ${describe(c)}` : `${who(c)} ${describe(c)}`;
 const res = (c) => (c.names && c.names.length ? c.names : c.resources || []).join(", ");
 function describe(c) {
@@ -293,108 +609,111 @@ function describe(c) {
     SecurityGroupDetached: `a security group was detached: ${c.before || r}`,
     InstanceStateChanged: `${r} went ${c.before} → ${c.after}`,
     StopInstances: `stopped ${r}`, StartInstances: `started ${r}`, RebootInstances: `rebooted ${r}`,
-    ModifyInstanceAttribute: `changed ${r}'s settings (security groups)`,
+    ModifyInstanceAttribute: `changed ${r}'s security groups`,
     ModifyDBInstance: `changed the database ${r}`, RebootDBInstance: `rebooted the database ${r}`, StopDBInstance: `stopped the database ${r}`,
   };
   return M[e] || `${e} on ${r}`;
 }
 async function refreshFeed() {
-  const data = await api("api/changes?minutes=180");
-  $("feed").replaceChildren(...(data.changes.length ? data.changes.slice(0, 14).map(c =>
-    el("li", {}, el("div", {}, el("span", { class: "t" }, hhmmss(c.at) + "  "), describe(c)), el("div", { class: "who" }, "by " + who(c))))
-    : [el("li", { class: "meta" }, "No changes in the last 3 hours.")]));
-}
-function renderTimeline(rep) {
-  const tl = rep.timeline || [];
-  // the changes that touch the root cause or a firewall on a broken path are "the cause"; the rest is context
-  const hot = new Set([rep.top, ...(rep.broken_paths || []).flatMap(b => [...(b.culprit_rules || []).map(c => c.firewall), ...(b.detached || []).map(d => d.firewall)])].filter(Boolean));
-  // the cause = the latest human change on those resources, plus the CloudTrail call behind it (discovery sees it up to ~60 s later)
-  const onHot = tl.filter(e => e.kind === "change" && !e.by_agent && (e.resources || []).some(r => hot.has(r)));
-  const last = onHot[onHot.length - 1];
-  const twin = last && last.source !== "cloudtrail" ? onHot.filter(e => e.source === "cloudtrail" && e.at <= last.at && last.at - e.at <= 90).pop() : null;
-  const isCause = (e) => e === last || e === twin;
-  $("whatCard").hidden = !tl.length;
-  $("timeline").replaceChildren(...tl.map(e => el("li", { class: "k" + e.kind + (e.kind === "change" ? (isCause(e) ? " cause" : " ctx") : "") },
-    el("span", { class: "t" }, hhmmss(e.at)),
-    el("span", {}, e.kind === "change" ? said(e) : e.kind === "alerts" ? `${e.event}: ${(e.names || []).join(", ")}` : e.event,
-       isCause(e) ? el("span", { class: "pill bad", style: "margin-left:8px" }, "the cause") : ""))));
+  // the last day, newest first: an empty "last 3 hours" told visitors nothing
+  const data = await api("api/changes?minutes=1440");
+  $("feedTitle").textContent = sandboxMode ? "What changed in the sandbox" : "What changed in the account";
+  $("feedNote").textContent = sandboxMode ? "Changes the scenarios made to the synthetic estate." : "Live from CloudTrail and discovery. Changes made by hand show up here.";
+  $("feed").replaceChildren(...(data.changes.length ? data.changes.slice(0, 20).map(c =>
+    el("li", { class: c.by_agent ? "agent" : c.actor ? "human" : "" },
+      el("div", {}, el("span", { class: "t" }, (Date.now() / 1000 - c.at > 86000 ? fmtTime(c.at) : hhmmss(c.at)) + "  "), describe(c)),
+      el("div", { class: "who" }, "by " + who(c))))
+    : [el("li", { class: "meta" }, sandboxMode ? "Nothing yet. Run a scenario." : "No changes in the last 24 hours.")]));
 }
 
+/* ---------- incidents ---------- */
 const PILL = { open: "open", proposed: "open", approved: "good", executed: "good", resolved: "done", verified: "done",
-               failed: "bad", unhealthy: "bad", degraded: "warn", healthy: "good" };
+               failed: "bad", rejected: "bad", unhealthy: "bad", degraded: "warn", healthy: "good" };
 function st(s) { return el("span", { class: "pill " + (PILL[s] || "") }, s ?? "—"); }
-
-async function loadScenarios() {
-  const data = await api("api/scenarios");
-  sandboxMode = data.sandbox;
-  $("tokenBox").hidden = data.sandbox;
-  $("mode").textContent = data.sandbox ? "Sandbox" : "Live";
-  $("mode").title = data.sandbox ? "graph: ops_sandbox (synthetic)" : "graph: ops_live";
-  $("sandboxNote").hidden = !data.sandbox;
-  if (!data.sandbox) {
-    $("scenarios").replaceChildren(el("button", { class: "ghost", onclick: async (e) => {
-      if (!confirm("Revoke rule A on the real AWS estate? Real alerts will fire; rootgraph investigates and you approve the fix.")) return;
-      const b = e.currentTarget; b.disabled = true;
-      try { const r = await api("api/live/break", { method: "POST" }); alert(`Revoked ${r.revoked}. ${r.next}.`); }
-      catch (err) { alert(err.message); } finally { b.disabled = false; }
-    } }, el("span", { class: "k" }, "BACKUP"), "Break it for me: revoke rule A"));
-    $("sandboxNote").hidden = false;
-    $("sandboxNote").replaceChildren("Real AWS (Sydney). Break something by hand in the AWS console (edit or delete a security-group rule, detach a security group, stop host-2) or stop a container on a host: it appears under \"What changed\", alerts follow, and rootgraph finds it. The backup button does it for you with a revoke-only IAM user. Operator token needed.");
-    return;
-  }
-  $("scenarios").replaceChildren(...data.scenarios.map((s, i) =>
-    el("button", { class: "ghost", title: s.title, onclick: async (e) => {
-      const b = e.currentTarget; b.disabled = true;
-      try { const r = await api(`api/scenarios/${s.name}/inject`, { method: "POST" }); await refreshList(); await openIncident(r.incident_id);
-            $("incident").scrollIntoView({ behavior: "smooth", block: "start" }); }
-      catch (err) { alert(err.message); } finally { b.disabled = false; }
-    } }, el("span", { class: "k" }, s.name.toUpperCase()), s.title)));
-}
 
 async function refreshList() {
   const rows = await api("api/incidents");
   $("incidents").replaceChildren(...(rows.length ? rows.map(r =>
     el("li", { class: r.id === current ? "sel" : "", onclick: () => openIncident(r.id) },
       el("div", { class: "row" }, el("span", { class: "id" }, r.id), st(r.status)),
-      el("div", { class: "meta" }, fmtTime(r.opened_at), r.top ? ` · ${r.top}` : "",
-         r.ttr_seconds != null ? ` · ${r.ttr_seconds}s` : ""))
+      el("div", { class: "meta", style: "font-size:13px" }, r.top ? nm(r.top) : "investigating…",
+         r.ttr_seconds != null ? ` · fixed in ${r.ttr_seconds}s` : "", el("br"), fmtTime(r.opened_at)))
   ) : [el("li", { class: "none" }, "No incidents yet.")]));
 }
 
 async function openIncident(id) {
   current = id;
+  if (!graphCache) await loadGraph().catch(() => {});
   render(await api(`api/incidents/${encodeURIComponent(id)}`));
   refreshList();
 }
 
+function renderSteps(inc) {
+  const acts = inc.actions || [], has = (s) => acts.some(a => a.status === s);
+  const k = !inc.report ? 1 : inc.status === "resolved" ? 5 : has("executed") || has("approved") ? 4 : acts.length ? 3 : 2;
+  const failed = inc.status === "failed" || (acts.length && acts.every(a => a.status === "failed" || a.status === "rejected"));
+  const names = ["Alerts", "Investigated", "Fix proposed", "Approved, running", "Verified"];
+  $("steps").replaceChildren(...names.map((n, i) => el("li", { class: i < k - 1 || (k === 5 && i === 4) ? "done" : i === k - 1 ? (failed ? "fail" : "now") : "" }, n)));
+}
+
+function humanExplainer(by) {
+  if (!by) return "";
+  if (by.startsWith("template")) {
+    const why = /429|limit/i.test(by) ? "the free AI model's daily limit was reached" : /error/i.test(by) ? "the AI model didn't answer" : "no AI model configured";
+    return `Explained by the built-in template (${why}). The diagnosis above never depends on the AI.`;
+  }
+  return `Explained and checked by ${by}`;
+}
+
+function plainSentence(rep) {
+  const top = rep.top, row = rep.scorecard.find(r => r.rid === top);
+  if (!top || !row) return "No single resource explains these alerts.";
+  const n = rep.alerting.length, ex = row.explains.length;
+  const bits = [];
+  const bp = (rep.broken_paths || []).find(b => (b.culprit_rules || []).length || (b.detached || []).length);
+  if (bp && (bp.culprit_rules || []).length) {
+    const r = bp.culprit_rules[0];
+    bits.push(String(r.rule_id || "").includes("@") ? `a firewall rule on ${nm(r.firewall)} was edited, so ${nm(bp.from)} can no longer reach ${nm(bp.to)}`
+                                                    : `a firewall rule on ${nm(r.firewall)} was removed, so ${nm(bp.from)} can no longer reach ${nm(bp.to)}`);
+  } else if (bp && bp.detached.length) bits.push(`a security group was detached from ${nm(bp.detached[0].target)}, so ${nm(bp.from)} can no longer reach ${nm(bp.to)}`);
+  else if (row.probe === "unhealthy") bits.push(`${nm(top)} itself is down`);
+  if (row.components.change_in_window && !bp) bits.push("it changed just before the alerts");
+  if (row.components.prior_incident_match) bits.push("the same cause was fixed before");
+  return `${nm(top)} explains ${ex} of ${n} alerting resources` + (bits.length ? `: ${bits.join("; ")}.` : ".");
+}
+
 function render(inc) {
   const rep = inc.report;
+  lastRep = rep;
   $("placeholder").hidden = true; $("incident").hidden = false;
   $("incId").textContent = inc.id;
   $("incStatus").replaceChildren(st(inc.status));
-  $("incTtr").textContent = inc.ttr_seconds != null ? `resolved in ${inc.ttr_seconds}s` : `opened ${fmtTime(inc.opened_at)}`;
+  $("incTtr").textContent = inc.ttr_seconds != null ? `fixed in ${inc.ttr_seconds}s` : `opened ${fmtTime(inc.opened_at)}`;
+  renderSteps(inc);
   clearTimeout(pollTimer);
   if (!rep) {
-    $("cause").textContent = "Investigating…";
-    $("explanation").textContent = "Walking the graph, checking paths and probes, then the agent verifies the ranking. This takes up to a minute with the LLM on.";
-    for (const id of ["multi"]) $(id).hidden = true;
-    $("explainedBy").textContent = ""; $("recall").textContent = "";
-    $("proposals").replaceChildren(); $("scorecard").replaceChildren(); $("trace").replaceChildren();
+    $("cause").textContent = "Investigating…"; $("causeRid").textContent = "";
+    $("plain").textContent = "Walking the graph, checking paths, probes and recent changes; then the AI checks the ranking. Up to a minute.";
+    $("explanation").textContent = ""; $("multi").hidden = true; $("whatCard").hidden = true;
+    $("explainedBy").textContent = ""; $("recall").textContent = ""; $("alerts").textContent = "";
+    $("proposals").replaceChildren(); $("scorecard").replaceChildren(); $("trace").replaceChildren(); $("traceChips").replaceChildren(); $("traceMore").replaceChildren();
     pollTimer = setTimeout(() => { if (current === inc.id) openIncident(inc.id).catch(() => {}); }, 2500);
     return;
   }
 
-  $("alerts").replaceChildren(el("span", { class: "a" }, `${rep.alertnames.join(", ")} on `),
-    ...rep.alerting.map((r, i) => el("span", { class: "a" }, el("b", {}, r), i < rep.alerting.length - 1 ? "," : "")));
+  $("alerts").replaceChildren(`${rep.alertnames.join(", ")} on `,
+    ...rep.alerting.map((r, i) => el("span", {}, el("b", {}, nm(r)), i < rep.alerting.length - 1 ? ", " : "")));
 
-  $("cause").textContent = rep.top ?? "No candidate";
+  $("cause").textContent = rep.top ? nm(rep.top) : "No candidate";
+  $("causeRid").textContent = rep.top && nm(rep.top) !== rep.top ? rep.top : "";
+  $("plain").textContent = plainSentence(rep);
   $("explanation").textContent = rep.explanation;
   $("multi").hidden = !rep.multiple_causes;
-  if (rep.multiple_causes) $("multi").textContent = `Multiple likely causes: ${rep.scorecard.slice(0, 2).map(r => `${r.rid} (${r.score})`).join(" and ")}. The scorecard ranks causes but does not split the alerts between them.`;
+  if (rep.multiple_causes) $("multi").textContent = `Multiple likely causes: ${rep.scorecard.slice(0, 2).map(r => `${nm(r.rid)} (${r.score})`).join(" and ")}. One fix is proposed for each.`;
   const u = rep.llm || {};
-  $("explainedBy").textContent = `Explanation: ${rep.explained_by}` +
-    (u.tokens_in || u.tokens_out ? ` · ${u.agent_calls} agent-chosen calls · ${u.tokens_in} tokens in / ${u.tokens_out} out` : "");
-  $("recall").textContent = rep.recalled.length ? ` · Seen before in ${rep.recalled.map(r => r["i.id"]).join(", ")}` : "";
+  $("explainedBy").textContent = humanExplainer(rep.explained_by) +
+    (u.agent_calls ? ` · ${u.agent_calls} tool calls chosen by the AI` : "");
+  $("recall").textContent = rep.recalled.length ? `Seen before in ${rep.recalled.map(r => r["i.id"]).join(", ")}` : "";
 
   renderTimeline(rep);
   renderProposals(rep, inc.actions);
@@ -403,32 +722,61 @@ function render(inc) {
   renderGraph(rep);
 }
 
+function renderTimeline(rep) {
+  const tl = rep.timeline || [];
+  // the changes that touch the root cause or a firewall on a broken path are candidates; the latest human one is the cause,
+  // plus the CloudTrail call behind it (discovery sees the same change a poll or two later)
+  const hot = new Set([rep.top, ...(rep.broken_paths || []).flatMap(b => [...(b.culprit_rules || []).map(c => c.firewall), ...(b.detached || []).map(d => d.firewall)])].filter(Boolean));
+  const onHot = tl.filter(e => e.kind === "change" && !e.by_agent && (e.resources || []).some(r => hot.has(r)));
+  const last = onHot[onHot.length - 1];
+  const twin = last && last.source !== "cloudtrail" ? onHot.filter(e => e.source === "cloudtrail" && e.at <= last.at && last.at - e.at <= 300).pop() : null;
+  const isCause = (e) => e === last || e === twin;
+  $("whatCard").hidden = !tl.length;
+  $("timeline").replaceChildren(...tl.map(e => el("li", { class: "k" + e.kind + (e.kind === "change" ? (isCause(e) ? " cause" : " ctx") : "") },
+    el("span", { class: "t" }, hhmmss(e.at)), el("span", { class: "dot" }),
+    el("span", { class: "txt" }, e.kind === "change" ? said(e) : e.kind === "alerts" ? `${e.event}: ${(e.names || []).join(", ")}` : e.event.replace(/root cause: (.*)/, (_, r) => `rootgraph: root cause is ${nm(r)}`),
+       isCause(e) ? el("span", { class: "tag-cause" }, "the cause") : null))));
+}
+
+const WHY = {
+  restore_firewall_rule: "Put back the exact rule that was removed.",
+  revert_rule_edit: "Edit the rule back to what it was before.",
+  reattach_security_group: "Re-attach the security group that was detached.",
+  start_instance: "Start the instance that was stopped; its services come back on their own.",
+  restart_service: "Start the stopped service.",
+};
 function renderProposals(rep, acts) {
   const byId = Object.fromEntries(acts.map(a => [a.id, a]));
   $("proposals").replaceChildren(...rep.proposals.map(p => {
-    if (!p.action) return el("div", { class: "action" }, el("h3", {}, `No fix proposed for ${p.rid}`), el("p", { class: "meta" }, p.reason));
-    const a = p.action, live = byId[a.id] || a, pr = a.params, kv = el("dl", { class: "kv" });
-    const add = (k, v) => { if (v != null && v !== "") kv.append(el("dt", {}, k), el("dd", {}, v)); };
+    if (!p.action) return el("div", { class: "action" }, el("h3", {}, `No fix proposed for ${nm(p.rid)}`), el("p", { class: "meta" }, p.reason));
+    const a = p.action, live = byId[a.id] || a, pr = a.params || {}, kv = el("dl", { class: "kv" });
+    const add = (k, v) => { if (v != null && v !== "" && !(Array.isArray(v) && !v.length)) kv.append(el("dt", {}, k), el("dd", {}, v)); };
+    const list = (xs) => (xs || []).map(nm).join(", ") || "none";
     if (a.kind === "restore_firewall_rule") {
-      add("Rule", `${pr.rule.proto} ${pr.rule.port_from}–${pr.rule.port_to} from ${pr.rule.source} (was ${pr.rule.original_rule_id})`);
-      add("Gains access", pr.gains_access);
-      add("Verifies", pr.verify_path ? pr.verify_path.join(" → ") : null);
-      add("Rollback", pr.rollback);
-      if (pr.aws_cli) add("AWS CLI", el("code", {}, pr.aws_cli));
+      add("Rule", `${pr.rule.proto} ${pr.rule.port_from}–${pr.rule.port_to} from ${nm(pr.rule.source)}`);
+      add("Gains access", nm(pr.gains_access));
+    } else if (a.kind === "revert_rule_edit") {
+      add("Now", pr.now); add("Back to", pr.before);
+    } else if (a.kind === "reattach_security_group") {
+      add("Re-attach", `${nm(pr.firewall)} to ${nm(pr.target)}`); add("Groups after", list(pr.groups_after));
+    } else if (a.kind === "start_instance") {
+      add("Instance", `${nm(pr.instance)} (now ${pr.state})`); add("Blast radius", list(pr.blast_radius));
     } else {
-      add("Command", el("code", {}, pr.command)); add("Host", pr.host);
-      add("Blast radius", (pr.blast_radius || []).join(", ") || "none"); add("Rollback", pr.rollback);
+      add("Command", el("code", {}, pr.command)); add("Host", pr.host ? nm(pr.host) : null); add("Blast radius", list(pr.blast_radius));
     }
+    add("Verifies", pr.verify_path ? pr.verify_path.map(nm).join(" → ") + " is reachable again" : null);
+    add("Rollback", pr.rollback);
+    if (pr.aws_cli) add("AWS CLI", el("code", {}, pr.aws_cli));
     if (p.prefilled_from) add("Memory", `the same fix resolved ${p.prefilled_from.incident} in ${p.prefilled_from.ttr_seconds}s`);
     if (live.approved_by) add("Approved by", live.approved_by);
     if (live.detail) add("Result", live.detail);
     const buttons = el("div", { class: "row" });
     if (live.status === "proposed") buttons.append(
       el("button", { class: "primary", onclick: (e) => act(e, a.id, "approve") }, "Approve and execute"),
-      el("button", { class: "text", onclick: (e) => act(e, a.id, "reject") }, "Reject"));
+      el("button", { class: "outline", onclick: (e) => act(e, a.id, "reject") }, "Reject"));
     return el("div", { class: "action" },
-      el("div", { class: "row" }, el("h3", {}, a.kind.replaceAll("_", " ")), el("span", { class: "meta" }, "on " + a.target_rid), st(live.status)),
-      kv, buttons);
+      el("div", { class: "row" }, el("h3", {}, a.kind.replaceAll("_", " ")), el("span", { class: "meta" }, "on " + nm(a.target_rid)), st(live.status)),
+      el("p", { class: "why" }, WHY[a.kind] || ""), kv, buttons);
   }));
 }
 
@@ -441,75 +789,102 @@ async function act(e, id, verb) {
 }
 
 function renderScorecard(rep) {
-  const head = el("tr", {}, ...["#", "Candidate", "Score", "Coverage", "Probe", "Broken path", "Change", "Memory", "Hops"].map(h => el("th", {}, h)));
+  const head = el("tr", {}, ...["#", "Candidate", "Score", "Covers", "Probe", "Broken path", "Changed", "Memory", "Hops"].map(h => el("th", {}, h)));
+  const max = Math.max(1, ...rep.scorecard.map(r => r.score));
   const rows = rep.scorecard.flatMap(r => [
     el("tr", { class: "main" + (r.rank === 1 ? " top" : "") },
-      el("td", {}, r.rank), el("td", {}, el("code", {}, r.rid)), el("td", { class: "num" }, r.score),
+      el("td", {}, r.rank),
+      el("td", { class: "cand" }, el("b", {}, nm(r.rid)), nm(r.rid) !== r.rid ? el("code", {}, r.rid) : null),
+      el("td", { class: "num" }, r.score, el("div", { class: "bar" }, el("span", { style: `width:${Math.max(0, r.score) / max * 100}%` }))),
       el("td", { class: "num" }, `${r.explains.length}/${rep.alerting.length}`), el("td", {}, st(r.probe)),
       el("td", {}, r.components.broken_path ? "yes" : ""), el("td", {}, r.components.change_in_window ? "yes" : ""),
       el("td", {}, r.components.prior_incident_match ? "yes" : ""), el("td", { class: "num" }, r.components.min_hops)),
-    el("tr", { class: "ev" }, el("td", {}), el("td", { colspan: "8", class: "meta" }, r.evidence.join("; ")))]);
+    el("tr", { class: "ev" }, el("td", {}), el("td", { colspan: "8" }, r.evidence.join("; ")))]);
   $("scorecard").replaceChildren(head, ...rows);
 }
 
 function renderTrace(rep) {
+  const all = rep.trace.map((t, i) => ({ ...t, n: i + 1 }));
+  const counts = { all: all.length, agent: all.filter(t => t.by === "agent").length, gap: all.filter(t => t.outcome === "not_in_graph" || t.outcome === "error").length };
+  const chip = (key, label) => el("button", { "aria-pressed": String(traceFilter === key), onclick: () => { traceFilter = key; traceAll = false; renderTrace(rep); } }, `${label} (${counts[key]})`);
+  $("traceChips").replaceChildren(chip("all", "All steps"), chip("agent", "Chosen by the AI"), chip("gap", "Not in graph / errors"));
+  const shown = all.filter(t => traceFilter === "all" || (traceFilter === "agent" ? t.by === "agent" : t.outcome === "not_in_graph" || t.outcome === "error"));
+  const visible = traceAll ? shown : shown.slice(0, 8);
   const head = el("tr", {}, ...["#", "By", "Tool", "Arguments", "Outcome", "ms"].map(h => el("th", {}, h)));
-  const rows = rep.trace.map((t, i) => {
+  const rows = visible.map(t => {
     const detail = el("details", {}, el("summary", {}, el("code", {}, t.tool)),
-      t.reason ? el("p", { class: "meta", style: "margin:6px 0 0" }, `Reason: ${t.reason}`) : null,
       t.cypher ? el("pre", {}, t.cypher) : null,
       t.tool === "probe" && t.rows[0]?.promql?.length ? el("pre", {}, t.rows[0].promql.join("\n")) : null,
       el("pre", {}, JSON.stringify(t.rows, null, 1)));
-    return el("tr", {}, el("td", {}, i + 1),
+    return el("tr", {}, el("td", {}, t.n),
       el("td", {}, el("span", { class: "pill " + (t.by === "agent" ? "agent" : "") }, t.by === "agent" ? "agent-chosen" : "pipeline")),
-      el("td", {}, detail, t.reason ? el("div", { class: "meta", style: "font-size:13px;margin-top:4px" }, t.reason) : null),
+      el("td", {}, detail, t.reason ? el("div", { class: "meta", style: "font-size:13px;margin-top:4px" }, `Reason: ${t.reason}`) : null),
       el("td", {}, el("code", {}, JSON.stringify(t.args))),
-      el("td", {}, el("span", { class: "pill " + (t.outcome === "error" ? "bad" : t.outcome === "not_in_graph" ? "warn" : "good") }, t.outcome)),
+      el("td", {}, el("span", { class: "pill " + (t.outcome === "error" ? "bad" : t.outcome === "not_in_graph" ? "warn" : "good") }, t.outcome.replaceAll("_", " "))),
       el("td", { class: "num" }, t.ms));
   });
-  $("trace").replaceChildren(head, ...rows);
+  $("trace").replaceChildren(head, ...(rows.length ? rows : [el("tr", {}, el("td", { colspan: "6", class: "meta" },
+    traceFilter === "agent" ? "The AI made no calls on this incident (it may have been unavailable)." : "None."))]));
+  $("traceMore").replaceChildren(shown.length > 8 ? el("button", { class: "outline small", onclick: () => { traceAll = !traceAll; renderTrace(rep); } },
+    traceAll ? "Show fewer" : `Show all ${shown.length} steps`) : "");
 }
 
+/* ---------- graph ---------- */
 const COLUMN = { Service: 0, Compute: 1, Firewall: 2, Database: 3 };
 const kindOf = (kinds) => ["Service", "Compute", "Database", "Firewall", "Network", "Internet", "CidrBlock"].find(k => kinds.includes(k)) || "Resource";
-const C = { ink: "#000000", paper: "#ffffff", hair: "#d6d3d0", ash: "#8f8a85", smoke: "#b3aea9", marigold: "#ffb110", coral: "#f64932", peach: "#f6d5b8" };
+const C = { ice: "#d8ecf8", frost: "#d1e4fa", mist: "#c7d3ea", fog: "#9da7ba", steel: "#2f343e", node: "#0d1020", violet: "#663af3", ember: "#e46d4c", amber: "#f1cf86" };
 
 async function renderGraph(rep) {
-  const data = await api("api/graph");
-  const counts = {};
-  const nodes = data.nodes.map(n => {
+  const data = graphCache && !rep.__fresh ? graphCache : await loadGraph();
+  const culprits = new Set((rep.broken_paths || []).flatMap(b => (b.culprit_rules || []).map(r => r.rule_id)));
+  const broken = new Set(rep.broken_paths.map(b => `${b.from}|${b.to}`));
+  const ranks = Object.fromEntries(rep.scorecard.map(r => [r.rid, r]));
+  const alerting = new Set(rep.alerting);
+  // focused view: the incident's resources and the firewalls and hosts between them
+  let keep = null;
+  if (graphView === "focus") {
+    keep = new Set([...rep.alerting, ...rep.scorecard.map(r => r.rid), ...(rep.broken_paths || []).flatMap(b => [b.from, b.to, ...(b.firewalls || [])])]);
+    for (const e of data.edges) if (e.type === "RUNS_ON" && keep.has(e.source)) keep.add(e.target);      // service -> its host
+    for (const e of data.edges) if (e.type === "PROTECTS" && keep.has(e.target)) keep.add(e.source);     // firewalls on kept hosts/dbs
+  }
+  const vis = data.nodes.filter(n => !keep || keep.has(n.rid));
+  const ids = new Set(vis.map(n => n.rid)), counts = {};
+  const nodes = vis.map(n => {
     const kind = kindOf(n.kinds), col = COLUMN[kind] ?? 4;
     const y = (counts[col] = (counts[col] ?? -1) + 1);
-    // stagger the firewall column so rule edges between firewalls don't pass through a node
     const dx = kind === "Firewall" ? (y % 2) * 70 : 0;
-    return { data: { id: n.rid, label: n.name || n.rid, kind }, position: { x: col * 220 + dx, y: y * 78 } };
+    return { data: { id: n.rid, label: n.name || n.rid, kind }, position: { x: col * 230 + dx, y: y * 84 } };
   });
-  const broken = new Set(rep.broken_paths.map(b => `${b.from}|${b.to}`));
-  const edges = data.edges.map((e, i) => ({ data: {
-    id: "e" + i, source: e.source, target: e.target,
-    cls: e.type === "ALLOWS_FROM" ? (e.active === false ? "removed" : "allow")
-       : e.type === "DEPENDS_ON" ? (broken.has(`${e.source}|${e.target}`) ? "broken" : "dep") : "infra",
-    label: e.type === "ALLOWS_FROM" && e.active === false ? `removed :${e.port_from}` : "" } }));
-  const alerting = new Set(rep.alerting), ranks = Object.fromEntries(rep.scorecard.map(r => [r.rid, r.rank]));
+  const edges = data.edges.filter(e => ids.has(e.source) && ids.has(e.target))
+    // removed rules pile up over many runs: draw only the one this incident blames
+    .filter(e => !(e.type === "ALLOWS_FROM" && e.active === false && !culprits.has(e.rule_id)))
+    .map((e, i) => ({ data: {
+      id: "e" + i, source: e.source, target: e.target,
+      cls: e.type === "ALLOWS_FROM" ? (e.active === false ? "removed" : "allow")
+         : e.type === "DEPENDS_ON" ? (broken.has(`${e.source}|${e.target}`) ? "broken" : "dep") : "infra",
+      label: e.type === "ALLOWS_FROM" && e.active === false ? `rule :${e.port_from} gone` : "" } }));
   if (cy) cy.destroy();
   cy = cytoscape({
-    container: $("cy"), elements: [...nodes, ...edges], layout: { name: "preset", padding: 24 }, wheelSensitivity: 0.2,
+    container: $("cy"), elements: [...nodes, ...edges], layout: { name: "preset", padding: 30 }, wheelSensitivity: 0.2,
     style: [
-      { selector: "node", style: { "label": "data(label)", "font-family": "Inter, system-ui, sans-serif", "font-size": 11, "color": "#37352f",
-          "text-valign": "bottom", "text-margin-y": 5, "background-color": C.paper, "border-width": 1, "border-color": C.hair, "width": 24, "height": 24 } },
+      { selector: "node", style: { "label": "data(label)", "font-family": "Inter, system-ui, sans-serif", "font-size": 12, "color": C.mist,
+          "text-valign": "bottom", "text-margin-y": 6, "background-color": C.node, "border-width": 1, "border-color": "#3f4959", "width": 26, "height": 26,
+          "text-outline-color": "#05060f", "text-outline-width": 2 } },
       { selector: "node[kind = 'Firewall']", style: { "shape": "round-rectangle" } },
-      { selector: "node[kind = 'Database']", style: { "shape": "barrel" } },
-      { selector: "node[kind = 'Compute']", style: { "shape": "round-rectangle", "width": 30 } },
-      { selector: "node.alerting", style: { "border-width": 3, "border-color": C.ink } },
-      { selector: "node.top", style: { "background-color": C.marigold, "border-width": 0, "width": 34, "height": 34 } },
-      { selector: "node.ranked", style: { "label": (n) => `${n.data("label")}  #${ranks[n.id()]}` } },
+      { selector: "node[kind = 'Database']", style: { "shape": "barrel", "width": 30 } },
+      { selector: "node[kind = 'Compute']", style: { "shape": "round-rectangle", "width": 32 } },
+      { selector: "node.alerting", style: { "border-width": 2.5, "border-color": C.amber } },
+      { selector: "node.top", style: { "background-color": C.violet, "border-width": 0, "width": 38, "height": 38, "color": C.ice, "font-weight": 600,
+          "underlay-color": C.violet, "underlay-opacity": .35, "underlay-padding": 10, "underlay-shape": "ellipse" } },
+      { selector: "node.ranked", style: { "label": (n) => `${n.data("label")}  #${ranks[n.id()].rank}` } },
+      { selector: "node:selected", style: { "border-width": 3, "border-color": C.ice } },
       { selector: "edge", style: { "width": 1.2, "curve-style": "bezier", "target-arrow-shape": "triangle", "arrow-scale": .7,
-          "line-color": C.ash, "target-arrow-color": C.ash, "opacity": .55, "font-size": 10, "label": "data(label)",
-          "color": "#ffffff", "text-background-color": C.coral, "text-background-opacity": 1, "text-background-padding": 2 } },
-      { selector: "edge[cls = 'dep']", style: { "line-color": C.ink, "target-arrow-color": C.ink, "opacity": .7, "width": 1.6 } },
-      { selector: "edge[cls = 'infra']", style: { "line-style": "dashed", "opacity": .45 } },
-      { selector: "edge[cls = 'allow']", style: { "line-color": C.smoke, "target-arrow-color": C.smoke, "line-style": "dotted", "opacity": .5 } },
-      { selector: "edge[cls = 'broken'], edge[cls = 'removed']", style: { "line-color": C.coral, "target-arrow-color": C.coral, "opacity": 1, "width": 3 } },
+          "line-color": C.fog, "target-arrow-color": C.fog, "opacity": .45, "font-size": 10, "label": "data(label)",
+          "color": "#fff", "text-background-color": C.ember, "text-background-opacity": 1, "text-background-padding": 3, "text-background-shape": "roundrectangle" } },
+      { selector: "edge[cls = 'dep']", style: { "line-color": C.mist, "target-arrow-color": C.mist, "opacity": .7, "width": 1.6 } },
+      { selector: "edge[cls = 'infra']", style: { "line-style": "dashed", "opacity": .35 } },
+      { selector: "edge[cls = 'allow']", style: { "line-style": "dotted", "opacity": .35 } },
+      { selector: "edge[cls = 'broken'], edge[cls = 'removed']", style: { "line-color": C.ember, "target-arrow-color": C.ember, "opacity": 1, "width": 3 } },
       { selector: "edge[cls = 'removed']", style: { "line-style": "dashed" } },
     ],
   });
@@ -518,25 +893,36 @@ async function renderGraph(rep) {
     if (n.id() === rep.top) n.addClass("top");
     if (ranks[n.id()]) n.addClass("ranked");
   });
-  cy.fit(undefined, 24);
+  cy.on("tap", "node", (ev) => {
+    const id = ev.target.id(), r = ranks[id];
+    $("nodeinfo").replaceChildren(el("b", {}, nm(id)), ` (${KINDS[id] || "resource"}${nm(id) !== id ? ", " + id : ""})`,
+      r ? ` · rank #${r.rank}, score ${r.score}: ${r.evidence.join("; ") || "no evidence"}` : alerting.has(id) ? " · alerting" : " · not a candidate");
+  });
+  cy.fit(undefined, 30);
 }
+$("viewFocus").addEventListener("click", () => { graphView = "focus"; $("viewFocus").setAttribute("aria-pressed", "true"); $("viewAll").setAttribute("aria-pressed", "false"); if (lastRep) renderGraph(lastRep); });
+$("viewAll").addEventListener("click", () => { graphView = "all"; $("viewAll").setAttribute("aria-pressed", "true"); $("viewFocus").setAttribute("aria-pressed", "false"); if (lastRep) renderGraph(lastRep); });
 
+/* ---------- wiring ---------- */
+$("heroGo").addEventListener("click", () => sandboxMode ? inject("s1") : $("app").scrollIntoView({ behavior: "smooth" }));
+$("placeholderGo").addEventListener("click", (e) => inject("s1", e.currentTarget));
 $("resetBtn").addEventListener("click", async () => {
   if (!confirm("Reset the sandbox? This deletes all incidents and memory.")) return;
-  try { await api("api/sandbox/reset", { method: "POST" }); current = null; $("incident").hidden = true; $("placeholder").hidden = false; await refreshList(); }
+  try { await api("api/sandbox/reset", { method: "POST" }); current = null; $("incident").hidden = true; $("placeholder").hidden = false; await refreshList(); refreshFeed().catch(() => {}); }
   catch (err) { alert(err.message); }
 });
 $("actor").value = store.get("rootgraph.actor") || "";
 $("token").value = store.get("rootgraph.token") || "";
-$("token").addEventListener("change", (e) => store.set("rootgraph.token", e.target.value.trim()));
+$("token").addEventListener("change", (e) => { store.set("rootgraph.token", e.target.value.trim()); refreshList().catch(() => {}); refreshFeed().catch(() => {}); });
 
-loadScenarios().catch(e => $("placeholder").append(el("p", { class: "err" }, e.message)));
-refreshList(); refreshFeed().catch(() => {});
+loadScenarios().then(() => { refreshFeed().catch(() => {}); loadGraph().then(refreshList).catch(() => {}); })
+  .catch(e => $("placeholder").append(el("p", { class: "err" }, e.message)));
+refreshList().catch(() => {});
 setInterval(() => {
   refreshList().catch(() => {}); refreshFeed().catch(() => {});
   // keep the open incident live (verification can resolve it minutes after Approve)
-  const st = document.querySelector('#incStatus .pill');
-  if (current && st && !['resolved', 'failed'].includes(st.textContent)) openIncident(current).catch(() => {});
+  const s = document.querySelector('#incStatus .pill');
+  if (current && s && !['resolved', 'failed'].includes(s.textContent)) openIncident(current).catch(() => {});
 }, 5000);
 </script>
 </body>

@@ -1,66 +1,71 @@
-# Notion — Style Reference
-> warm paper notebook under afternoon sun
+# Authkit — Style Reference
+> Frosted glass cathedral at midnight
 
-**Theme:** light
+**Theme:** dark
 
 Source measurements are normalized; roles and recommendations are interpreted. Font summary lists are independent, not paired by position. HTML examples are reconstructions, not source components.
 
-Notion reads like a well-loved paper notebook under afternoon light: a warm off-white canvas (#f6f5f4) that feels tactile rather than clinical, generous sans typography that gives editorial weight to product copy, and color used as sparse punctuation — peachy pills highlight verbs, a single blue anchors the primary action, and a rotating cast of accent hues (coral, amber, sky, midnight) paints the feature card backgrounds like sticky notes. Cards sit on the canvas with 1px hairline borders and 12px corners — no shadows, no chrome — like ruled sections in a Moleskine. Motion is playful and springy, with 200ms ease transitions and bouncy character-mark animations that make the interface feel alive without ever being decorative.
+AuthKit renders a midnight product-launch aesthetic: a near-black canvas with frosted-glass surfaces, a grid of faint blueprint lines, and luminous text that appears lit from behind a glass layer. Type is almost entirely white-on-dark with one vivid violet as the single functional accent — every interactive surface wears a soft inset hairline of cool blue-white rather than a hard border. Components sit on translucent layers stacked above ambient glows, with cards that look like glass plates lit from below rather than paper panels. Spacing is generous and rhythmic; the hero is a single full-bleed illuminated wordmark surrounded by floating glass cards rather than a conventional split layout.
 
 ## Tokens — Colors
 
 | Name | Value | Token | Role |
 |------|-------|-------|------|
-| Notion Blue | `#0075de` | `--color-notion-blue` | Primary CTA fill, active nav accent, filled action buttons — the single chromatic commitment in a near-monochrome system, saturated enough to read as a switch |
-| Paper Warmth | `#f6f5f4` | `--color-paper-warmth` | Page canvas, hero background, section backgrounds — warm off-white gives the system its tactile analog feel |
-| Pure White | `#ffffff` | `--color-pure-white` | Card surfaces, elevated panels, logo-wall background, contrast text on dark cards |
-| Ink Black | `#000000` | `--color-ink-black` | Primary text, nav links, headings — deployed at varying alpha (100%, 95%, 90%, 60%, 40%, 20%) to build hierarchy without adding new colors |
-| Charcoal | `#111111` | `--color-charcoal` | Dark text variant for specific UI moments where pure black would feel too harsh |
-| Stone | `#757575` | `--color-stone` | Secondary nav text, muted helper text, deactivated button labels — the 60% alpha of ink |
-| Graphite | `#615d59` | `--color-graphite` | Body text with warm cast — the brown-tinted gray that harmonizes with the warm canvas |
-| Slate | `#696969` | `--color-slate` | Card body text, secondary content within cards — slightly lighter than Stone |
-| Sky Tint | `#e6f3fe` | `--color-sky-tint` | Ghost CTA background, soft blue wash for secondary actions, tinted hover states |
-| Marigold | `#ffb110` | `--color-marigold` | Hero pill highlights, Agent feature card background, warm accent for callouts — the first color the eye finds |
-| Coral | `#f64932` | `--color-coral` | Decorative card backgrounds, hero pill alternates, warm-to-hot accent in the rotating cast |
-| Saffron | `#e89d01` | `--color-saffron` | Body-section accent panels, secondary warm yellow for background washes |
-| Vermillion | `#e32d14` | `--color-vermillion` | Deep coral for saturated body-section backgrounds, signal-warm accent |
-| Mocha | `#b18164` | `--color-mocha` | Warm brown accent for body-section panels — the earthy member of the accent cast |
-| Signal Blue | `#097fe8` | `--color-signal-blue` | Decorative card backgrounds, hero decorative highlights, secondary blue for visual variety |
-| Sky Wash | `#62aef0` | `--color-sky-wash` | Lightest blue in the cast — decorative backgrounds, heading accent highlights, airy washes |
-| Midnight Ink | `#02093a` | `--color-midnight-ink` | Violet wash for highlight backgrounds, decorative bands, and soft emphasis behind content. |
+| Midnight Canvas | `#05060f` | `--color-midnight-canvas` | Page background, deepest card surface, badge fills — the near-black base everything else floats on |
+| Steel Plate | `#2f343e` | `--color-steel-plate` | Elevated surface, button fills for ghost/secondary actions, subtle panel backing |
+| Fog Veil | `#9da7ba` | `--color-fog-veil` | Muted body copy, card text — readable but stepped back from headlines |
+| Moon Mist | `#c7d3ea` | `--color-moon-mist` | Body text, secondary labels, muted helper copy |
+| Frost Glow | `#d1e4fa` | `--color-frost-glow` | Primary text fill for body and links, badge text, icon fills — the default luminous foreground |
+| Ice Highlight | `linear-gradient(0deg, #d8ecf8 0%, #98c0ef 100%)` | `--color-ice-highlight` | Light text on dark surfaces, inverse labels, and high-contrast captions. Do not promote it to the primary CTA color; Headline gradient — top-to-bottom fade from Ice Highlight to soft blue, used on the AuthKit wordmark and key headings |
+| Pure White | `#ffffff` | `--color-pure-white` | Button text, input text, maximum-emphasis foreground |
+| Void Violet | `#663af3` | `--color-void-violet` | Primary CTA fill — the only chromatic accent, used exclusively for the Continue/Submit button inside auth forms; vivid violet against near-black creates focused urgency without breaking the monochromatic mood |
+| Blueprint Blue | `#b6d9fc` | `--color-blueprint-blue` | Decorative icon accent, soft highlight wash on feature illustrations |
+| Ember Glow | `#e46d4c` | `--color-ember-glow` | Secondary accent — appears in demo/showcase contexts (logo recoloring swatches) for brand-color customization display |
+| Signal Blue | `#027dea` | `--color-signal-blue` | Secondary accent — appears in customization swatch grids to demonstrate brand-color options |
+| Deep Teal | `#269684` | `--color-deep-teal` | Secondary accent — appears in customization swatch grids |
+| Gridline Blue | `#3f4959` | `--color-gridline-blue` | Shadow color for outer card drop-shadows — cool dark blue-grey gives elevation a tinted, on-brand feel rather than neutral black |
+| Glass Edge | `#bad7f71f` | `--color-glass-edge` | Hairline borders on buttons, inputs, and links — inset 1px stroke of frosted blue-white that defines edges without hard lines |
+| Luminous Fill | `#c7d3ea1f` | `--color-luminous-fill` | Badge fill and soft surface tint — translucent cool white for tag backgrounds and subtle UI washes |
 
 ## Tokens — Typography
 
-### NotionInter — Primary sans-serif — geometric humanist with slight quirks, deployed at 400 for body, 500 for nav/UI, 600-700 for display headings. The type-scale uses aggressive negative letter-spacing at large sizes (-4.6px at 96px, -2px at 72px) that tightens the headline to feel confident and compact rather than airy. · `--font-notioninter`
+### Untitled Sans — Body, UI, buttons, inputs, badges, small headings — the working typeface for everything functional · `--font-untitled-sans`
 - **Substitute:** Inter
 - **Weights:** 400, 500, 600, 700
-- **Sizes:** 12px, 14px, 16px, 20px, 22px, 24px, 40px, 42px, 48px, 54px, 72px, 96px
-- **Line height:** 0.83, 1.00, 1.04, 1.14, 1.21, 1.27, 1.33, 1.40, 1.43, 1.50
-- **Letter spacing:** -0.048em at 96px, -0.036em at 42px, -0.035em at 54px, -0.028em at 72px, -0.011em at 22px, +0.01em at 12px, normal at body sizes
-- **OpenType features:** `"lnum", "locl" 0`
-- **Role:** Primary sans-serif — geometric humanist with slight quirks, deployed at 400 for body, 500 for nav/UI, 600-700 for display headings. The type-scale uses aggressive negative letter-spacing at large sizes (-4.6px at 96px, -2px at 72px) that tightens the headline to feel confident and compact rather than airy.
+- **Sizes:** 12px, 14px, 16px, 18px, 24px
+- **Line height:** 1.17, 1.20, 1.33, 1.43, 1.50, 2.29, 2.57
+- **Letter spacing:** -0.0100em
+- **Role:** Body, UI, buttons, inputs, badges, small headings — the working typeface for everything functional
 
-### Lyon Text — Editorial serif reserved for specific body-text moments and section intros — used sparingly (4 instances) to give voice a literary weight, like a pull-quote in a magazine layout. Functions as a system accent, not a parallel hierarchy. · `--font-lyon-text`
-- **Substitute:** Source Serif Pro
+### aeonikPro — Display headings only — the wordmark 'AuthKit', section headings, hero copy; weight 500 at 44-48px gives the wordmark a wide, calm presence rather than a bold shout · `--font-aeonikpro`
+- **Substitute:** Space Grotesk
+- **Weights:** 400, 500
+- **Sizes:** 28px, 44px, 48px
+- **Line height:** 1.14, 1.16, 1.17, 1.20
+- **Letter spacing:** normal
+- **Role:** Display headings only — the wordmark 'AuthKit', section headings, hero copy; weight 500 at 44-48px gives the wordmark a wide, calm presence rather than a bold shout
+
+### dotDigital — All-caps eyebrow labels ('Introducing', 'Extensible by design', 'Shine bright') — 0.10em tracked monospace-flavored caps act as quiet section markers between the display type and body copy · `--font-dotdigital`
+- **Substitute:** JetBrains Mono
 - **Weights:** 400
-- **Sizes:** 18px, 32px
-- **Line height:** 1.25, 1.56
-- **Role:** Editorial serif reserved for specific body-text moments and section intros — used sparingly (4 instances) to give voice a literary weight, like a pull-quote in a magazine layout. Functions as a system accent, not a parallel hierarchy.
+- **Sizes:** 15px
+- **Line height:** 1.20
+- **Letter spacing:** 0.1000em
+- **OpenType features:** `"tnum" on`
+- **Role:** All-caps eyebrow labels ('Introducing', 'Extensible by design', 'Shine bright') — 0.10em tracked monospace-flavored caps act as quiet section markers between the display type and body copy
 
 ### Type Scale
 
 | Role | Family | Weight | Size | Line Height | Letter Spacing | Token |
 |------|--------|--------|------|-------------|----------------|-------|
-| caption | — | — | 12px | 1.33 | 0.12px | `--text-caption` |
-| body-sm | — | — | 14px | 1.43 | — | `--text-body-sm` |
-| body | — | — | 16px | 1.5 | — | `--text-body` |
-| subheading | — | — | 20px | 1 | — | `--text-subheading` |
-| heading-sm | — | — | 22px | 1.27 | -0.242px | `--text-heading-sm` |
-| heading | — | — | 40px | 1.5 | — | `--text-heading` |
-| heading-lg | — | — | 48px | 1.5 | — | `--text-heading-lg` |
-| display-sm | — | — | 54px | 1.04 | -1.89px | `--text-display-sm` |
-| display | — | — | 72px | 1.21 | -2.016px | `--text-display` |
-| display-lg | — | — | 96px | 1.04 | -4.608px | `--text-display-lg` |
+| caption | — | — | 12px | 1.33 | 0px | `--text-caption` |
+| body-sm | — | — | 14px | 1.43 | 0px | `--text-body-sm` |
+| body | — | — | 16px | 1.5 | -0.16px | `--text-body` |
+| subheading | — | — | 18px | 1.33 | 0px | `--text-subheading` |
+| heading-sm | — | — | 24px | 1.17 | -0.24px | `--text-heading-sm` |
+| heading | — | — | 28px | 1.14 | 0px | `--text-heading` |
+| heading-lg | — | — | 44px | 1.16 | 0px | `--text-heading-lg` |
+| display | — | — | 48px | 1.17 | 0px | `--text-display` |
 
 ## Tokens — Spacing & Shapes
 
@@ -78,174 +83,204 @@ Notion reads like a well-loved paper notebook under afternoon light: a warm off-
 | 16 | 16px | `--spacing-16` |
 | 20 | 20px | `--spacing-20` |
 | 24 | 24px | `--spacing-24` |
-| 28 | 28px | `--spacing-28` |
 | 32 | 32px | `--spacing-32` |
 | 36 | 36px | `--spacing-36` |
-| 64 | 64px | `--spacing-64` |
-| 80 | 80px | `--spacing-80` |
+| 40 | 40px | `--spacing-40` |
+| 48 | 48px | `--spacing-48` |
+| 56 | 56px | `--spacing-56` |
+| 100 | 100px | `--spacing-100` |
+| 120 | 120px | `--spacing-120` |
+| 200 | 200px | `--spacing-200` |
 
 ### Border Radius
 
 | Element | Value |
 |---------|-------|
-| cards | 12px |
-| pills | 9999px |
-| small | 4px |
-| buttons | 8px |
+| cards | 16px |
+| badges | 6px |
+| inputs | 6px |
+| modals | 16px |
+| buttons | 999px |
+| iconContainers | 9999px |
+
+### Shadows
+
+| Name | Value | Token |
+|------|-------|-------|
+| sm | `rgba(186, 207, 247, 0.32) 0px 0px 6px 0px` | `--shadow-sm` |
+| md | `rgba(238, 186, 247, 0.24) 0px 0px 12px 0px` | `--shadow-md` |
+| subtle | `rgba(186, 215, 247, 0.12) 0px 0px 0px 1px inset` | `--shadow-subtle` |
+| subtle-2 | `rgba(199, 211, 234, 0.12) -0.5px 0.5px 1px 0px inset, rgb...` | `--shadow-subtle-2` |
+| subtle-3 | `rgba(186, 214, 247, 0.06) 0px 0px 0px 1px inset` | `--shadow-subtle-3` |
+| subtle-4 | `rgba(199, 211, 234, 0.12) 0px 1px 1px 0px inset, rgba(199...` | `--shadow-subtle-4` |
+| subtle-5 | `rgba(255, 255, 255, 0.1) 0px 0px 0px 1px inset` | `--shadow-subtle-5` |
+| subtle-6 | `rgba(216, 236, 248, 0.2) 0px 1px 1px 0px inset, rgba(168,...` | `--shadow-subtle-6` |
+| subtle-7 | `rgba(216, 236, 248, 0.2) 0px 1px 1px 0px inset, rgba(168,...` | `--shadow-subtle-7` |
+| subtle-8 | `rgba(216, 236, 248, 0.2) 0px 1px 1px 0px inset, rgba(168,...` | `--shadow-subtle-8` |
+| subtle-9 | `rgba(186, 214, 247, 0.24) 0px 0px 0px 1px inset` | `--shadow-subtle-9` |
 
 ### Layout
 
-- **Page max-width:** 1440px
-- **Section gap:** 80px
+- **Page max-width:** 1200px
+- **Section gap:** 120px
 - **Card padding:** 24px
-- **Element gap:** 8px
+- **Element gap:** 16px
 
 ## Components
 
-### Primary CTA Button
-**Role:** Filled blue action button for the main conversion goal
+### Pill Button (Primary Ghost)
+**Role:** Default button — used for 'Get started', 'Continue with Google/Microsoft', 'Learn more' links
 
-Background #0075de, text #ffffff at 14px NotionInter weight 500, border-radius 8px, padding 6px 15px. The only chromatic filled button in the system — every other action defers to ghost or text styles.
+999px radius, padding 8px 16px, background rgba(186,214,247,0.06) (faint frost wash), text #ffffff, 1px inset border rgba(186,215,247,0.12) of frosted blue-white. Weight 500, 14px Untitled Sans. Hover lightens the frost wash to rgba(186,214,247,0.12).
 
-### Ghost CTA Button
-**Role:** Secondary action with a subtle blue tint
+### Pill Button (Outlined)
+**Role:** Secondary navigation button — header GitHub icon, secondary CTAs
 
-Background #e6f3fe (sky tint), text #0075de at 14px weight 500, border-radius 8px, padding 6px 15px. Pairs beside the primary CTA as the lower-commitment alternative.
+999px radius, padding 8px 16px, transparent background, text #d1e4fa, 1px inset border rgba(186,215,247,0.12). Same geometry as primary ghost; only the fill differs.
 
-### Ghost Text Button
-**Role:** Minimal action button with no fill or border
+### Violet CTA Button
+**Role:** Sole chromatic CTA — appears only inside auth-form mockups as the 'Continue' submit button
 
-Background transparent, text #000000 at 95% alpha, border-radius 8px, padding 6px 15px. The default for tertiary actions in the hero and feature cards.
+Solid fill #663af3, white text, 6px radius, padding 12px 24px, weight 500. The only place a non-monochrome button appears; its vivid violet punches against the midnight palette.
 
-### Outlined Text Button
-**Role:** Bordered button with no fill for mid-priority actions
+### Glass Card (Feature)
+**Role:** Feature cards, icon containers, section panels
 
-Background transparent, text #000000 at 90% alpha, 1px border at same color, border-radius 4px, padding 5px 10px. Used for compact inline actions like view-all links.
+16px radius, background rgba(186,214,247,0.03) (nearly invisible frost tint), padding 24px, no hard border. Elevation built from inset frost highlight + soft outer halo — reads as a glass plate lit from behind.
 
-### Muted Nav Link
-**Role:** Low-emphasis navigation item
+### Auth-Form Modal Card
+**Role:** The headline product — floating login/signup cards in the hero
 
-Background transparent, text #000000 at 54% alpha, border-radius 8px, padding 12px 16px. The default nav-item state — text darkens to full alpha on hover, never gets an underline.
+16px radius, background rgba(5,6,15,0.97), padding 24-32px. Three-layer shadow stack: top inset frost (#d8ecf8 20%), mid inset glow (#a8d8f5 6%), bottom drop (#000 30%). Floats above the hero with the central card scaled larger than its siblings.
 
-### Pill Tag
-**Role:** Category label or status indicator
+### Text Input
+**Role:** Email, password, and text fields inside auth forms
 
-Background colored fill (varies), text #000000 or #ffffff, border-radius 9999px, padding 4px 12px. Used for status labels like 'In progress', 'To do', 'Complete' in product mockups.
+6px radius, background rgba(199,211,234,0.06), text #ffffff, placeholder #c7d3ea at ~60% opacity, 1px inset border rgba(186,215,247,0.12). Padding 10px horizontal. Focus state increases the border opacity to 0.24.
 
-### White Feature Card
-**Role:** Standard content card on warm canvas
+### Provider Button (Social Login)
+**Role:** Continue with Google / Microsoft / SSO buttons
 
-Background #ffffff, border-radius 12px, padding 24px, 1px solid border at rgba(0,0,0,0.08), no shadow. The default card — sits on the warm canvas like a sticky note.
+Full-width pill (999px or 6px radius variant), padding 12px 16px, background rgba(199,211,234,0.06), white text, provider icon left-aligned. Divider 'OR' sits between email submit and social options in 12px muted caps.
 
-### Accent Feature Card
-**Role:** Full-bleed colored card for feature blocks
+### Section Eyebrow Label
+**Role:** All-caps section markers ('Introducing', 'Extensible by design', 'Shine bright', 'Light and dark modes supported')
 
-Background one of the accent hues (#ffb110, #f64932, #62aef0, #e6f3fe, etc.), border-radius 12px, padding 24px, no border. Functions as a colored panel that paints the canvas — text inside uses #000000 or #ffffff depending on contrast.
+15px dotDigital, weight 400, letter-spacing 0.10em, color #c7d3ea, centered. Flanked by thin horizontal lines that fade from transparent to rgba(186,215,247,0.12) and back.
 
-### Dark Feature Card
-**Role:** Inverted card for dark-on-light contrast moments
+### Feature Icon Tile
+**Role:** Icon containers in the feature row (Single Sign-On, Password, MFA, Social Login, RBAC, Magic Auth)
 
-Background #02093a (midnight), text #ffffff, border-radius 12px, padding 24px. The system uses this sparingly as a 'dark mode island' on the light page — not as a full dark theme.
+9999px radius (perfect circle), ~56-64px square, background frosted tint, outlined glyph icon in #d1e4fa. Icons are line-art (1.5px stroke), mono — no fill, no color variation between tiles.
 
-### Hero Highlight Pill
-**Role:** Colored pill placed behind a verb in hero copy
+### Badge / Tag
+**Role:** Category tags on integration cards (Email & Password, Social Login, MFA, SSO)
 
-Background accent color (peach #f6d5b8, yellow #ffb110, or coral #f64932), text #000000, border-radius 9999px, padding 8px 24px. The signature typographic device — wraps a single word in a sentence to draw the eye and give it weight.
+6px radius, background rgba(199,211,234,0.12), text #d1e4fa, padding 4px 8px, 12px Untitled Sans weight 500. Multi-layer inset shadow gives a faint inner glow.
 
-### Avatar Character Mark
-**Role:** Decorative illustrated character in a circle
+### Logo Mark (WorkOS / AuthKit)
+**Role:** Wordmark in header and hero
 
-40-48px circle with 2px colored border (blue, red, yellow), flat illustration inside, white background. Used in hero arrangements and scattered as decorative marks with squiggle/sparkle companions.
+WorkOS wordmark is Untitled Sans weight 500 at 16px in #d1e4fa. The AuthKit hero wordmark is aeonikPro weight 500 at ~140-180px (display size extrapolated), filled with the Skywash vertical gradient (#d8ecf8 → #98c0ef).
 
-### Kanban Task Card
-**Role:** Product UI task item in the embedded product mockup
+### Background Grid Layer
+**Role:** Ambient page atmosphere — blueprint grid behind all sections
 
-Background #ffffff, border-radius 8px, padding 8px 12px, 1px border at rgba(0,0,0,0.08), small status text and emoji. Replicates the real Notion task card aesthetic inside the marketing screenshot.
+Full-bleed SVG/div layer with 1px lines at rgba(186,215,247,0.06), ~80-100px cell spacing, masked to fade at edges. A conic gradient halo sits at the top center creating a spotlight effect.
 
-### Section Header
-**Role:** Large heading that opens a new content section
+### Theme Toggle (Light/Dark)
+**Role:** Demonstrates the product's light/dark mode support
 
-NotionInter weight 500-700, 48-54px, line-height 1.04-1.5, letter-spacing -1.89 to -2.016px. Color #000000. Followed by an optional Lyon Text subhead at 18px for editorial voice.
+Pill-shaped segmented control, 999px radius, two segments (moon icon / sun icon), 32px tall. Active segment has a slightly brighter frost background; inactive is transparent.
 
-### Logo Wall Item
-**Role:** Greyscale partner/client logo
+### Customization Swatch
+**Role:** Color picker tiles in the 'Your brand. Your style.' section
 
-SVG logo at native proportions, color desaturated to near-black (#000000 at 60% alpha), no individual borders or backgrounds. Centered grid layout with generous spacing — logos are treated as typography, not imagery.
+Small 20-24px squares, 4-6px radius, filled with the brand color (violet, blue, teal, orange). Arranged in a row with 4px gaps. Labeled 'Colour' in 12px muted text.
 
 ## Do's and Don'ts
 
 ### Do
-- Use #f6f5f4 as the page canvas and #ffffff for card surfaces — never invert this hierarchy by putting a warm card on a white page
-- Reserve #0075de for the single primary action per screen; all secondary actions should use ghost (#e6f3fe bg) or text styles
-- Apply negative letter-spacing to all display sizes: -4.6px at 96px, -2px at 72px, -1.9px at 54px — body text stays at normal tracking
-- Use 1px solid borders at rgba(0,0,0,0.08) instead of shadows to separate cards from the canvas
-- Use 12px border-radius for cards and 8px for buttons; reserve 9999px for pills and hero highlight pills only
-- Paint feature-block backgrounds with accent hues (#ffb110, #f64932, #62aef0, #02093a) rather than adding borders or shadows to create visual variety
-- Keep motion at 200ms with ease timing for hovers and transitions; reserve spring/bounce animations for character marks and hero elements
+- Use 999px radius for all interactive elements (buttons, social-login buttons, tag toggles); reserve 16px radius exclusively for cards and modals, 6px for badges and inputs, and 9999px for circular icon containers.
+- Build elevation from inset frost highlights + soft outer halos rather than conventional drop-shadows: pair inset rgba(216,236,248,0.2) 1px top edge with a 24-48px inset glow and a dark cool drop.
+- Use Void Violet (#663af3) exclusively for the auth-form Continue/submit CTA — never as a decorative accent or non-auth button background.
+- Set headline text in aeonikPro weight 500 at 44-48px with the Skywash vertical gradient (#d8ecf8 → #98c0ef); body and UI in Untitled Sans 400-500.
+- Place all-caps eyebrow labels (dotDigital, 15px, 0.10em tracking, #c7d3ea) centered and flanked by fading horizontal lines at rgba(186,215,247,0.12) to mark every section opening.
+- Use rgba(186,215,247,0.12) as the universal hairline border — never solid strokes; the frosted-inset edge is the system's border language.
+- Set section gaps at 120px and card padding at 24px; rhythm should feel cathedral-like rather than dense SaaS.
+- Render text in the Ice Highlight → Frost Glow → Moon Mist → Fog Veil progression (#d8ecf8 → #d1e4fa → #c7d3ea → #9da7ba) for heading → body → muted body → helper copy.
+- Use the conic-gradient spotlight halo (rgba(124,145,182,0.5) at center, fading outward) at the top of every full-bleed hero to anchor the composition.
 
 ### Don't
-- Do not use pure #ffffff as the page background — the warm #f6f5f4 canvas is the system's signature warmth
-- Do not add shadows to content cards — the system uses hairline borders only, shadows appear only on the product UI mockup and nav bar
-- Do not use multiple chromatic button colors in the same view — #0075de is the only filled button; color variety belongs in card backgrounds
-- Do not use #000000 at 100% for all text — build hierarchy through alpha (100%, 95%, 60%, 40%) on the same color
-- Do not use Lyon Text for UI labels or navigation — it is reserved for editorial body copy moments at 18px
-- Do not apply border-radius larger than 12px to rectangular content — pills (9999px) and cards (12px) are the two shapes
-- Do not use gradients — the system is strictly flat fills; visual depth comes from the warm-to-white surface contrast and accent card backgrounds
+- Do not introduce additional chromatic accents — the palette is monochromatic with one violet CTA; any extra hue breaks the system.
+- Do not use solid colored borders; replace them with 1px inset rgba(186,215,247,0.12) strokes to preserve the glass aesthetic.
+- Do not use bold weights (600+) on aeonikPro display headings — the wordmark's authority comes from weight 500 at large size, not volume.
+- Do not apply conventional drop-shadows; the system reads elevation through inset glow + dark halo.
+- Do not mix radius families on the same component type — every button is pill, every card is 16px, every badge is 6px.
+- Do not place white (#ffffff) on background tints brighter than rgba(186,214,247,0.12) — the contrast floor collapses.
+- Do not use the Skywash gradient on body text or buttons; reserve it for the display wordmark and the largest headings only.
+- Do not introduce light-theme colors into core tokens even though the product supports light mode; the marketing site is dark-first, and light-mode demos are a product feature, not a design-system palette.
 
 ## Surfaces
 
 | Level | Name | Value | Purpose |
 |-------|------|-------|---------|
-| 0 | Page Canvas | `#f6f5f4` | Warm off-white base for the entire page — the analog-paper feel starts here |
-| 1 | Card Surface | `#ffffff` | White cards on warm canvas — pure white is reserved for surfaces that need to read as 'on top of the page' |
-| 2 | Accent Card Surface | `#ffb110` | Colored card backgrounds (yellow, coral, blue, midnight) — feature blocks paint the canvas with single-hue fills |
-| 3 | Dark Card Surface | `#02093a` | Deep navy panels for dark-mode-style feature blocks — inverting the surface stack with white text on midnight |
+| 0 | Midnight Canvas | `#05060f` | Full-bleed page background, deepest layer |
+| 1 | Steel Plate | `#2f343` | Elevated panels, ghost-button fills |
+| 2 | Frosted Glass | `#bad6f708` | Translucent card surface — barely-visible tint that reads as glass above the canvas |
+| 3 | Deep Glass | `#05060ff7` | Auth-form modal surface — nearly opaque midnight with frosted-edge shadow stack |
 
 ## Elevation
 
-- **Nav (sticky):** `0px 0.7px 1.462px 0px rgb(0% 0% 0%/0.015), 0px 3px 9px 0px rgb(0% 0% 0%/0.03)`
-- **Product UI Mockup:** `0px 4px 12px rgba(0, 0, 0, 0.1)`
+- **Auth-form modal card:** `inset 0 1px 1px rgba(216, 236, 248, 0.2), inset 0 24px 48px rgba(168, 216, 245, 0.06), 0 16px 32px rgba(0, 0, 0, 0.3)`
+- **Feature card:** `inset 0 1px 1px rgba(199, 211, 234, 0.12), inset 0 24px 48px rgba(199, 211, 234, 0.05), 0 24px 32px rgba(6, 6, 14, 0.7)`
+- **Floating auth-card (hero):** `inset 0 1px 1px rgba(216, 236, 248, 0.2), inset 0 24px 48px rgba(168, 216, 245, 0.06), 0 16px 32px rgba(0, 0, 0, 0.3)`
+- **Glow halo (behind hero wordmark):** `0 0 6px rgba(186, 207, 247, 0.32), 0 0 12px rgba(238, 186, 247, 0.24)`
 
 ## Imagery
 
-Illustration-first, photography-free. The visual language is built from flat illustrated character marks (round faces in 2px colored circles), abstract decorative elements (hand-drawn squiggles, sparkles, arrows, flower shapes), and product UI mockups. Character marks appear in the hero as a horizontal row of 7 avatars and scatter across the page as playful punctuation. Product screenshots are the only 'real' visuals — they show the actual Notion interface (kanban boards, document views, AI agent panels) with full chrome and real data. The product mockup in the hero is large, centered, and casts a single drop-shadow to separate it from the canvas. There are no lifestyle photos, no stock imagery, no abstract 3D renders.
+Visuals are dominated by glass-morphism auth-form mockups (email/password inputs, social-login buttons, passwordless code-entry) rendered as floating translucent cards against the midnight canvas. Feature icons are line-art mono glyphs in #d1e4fa inside circular frosted tiles. A faint blueprint grid (1px lines at rgba(186,215,247,0.06)) covers the full page as ambient atmosphere, and a conic-gradient spotlight halo glows at the top of the hero. No photography, no lifestyle imagery, no product screenshots — the product IS the visual: login boxes arranged like glass prototypes in a dark studio.
 
 ## Layout
 
-Centered, max-width contained at ~1440px. The hero is a centered stack: character-mark row → large two-line headline with an embedded colored pill → subhead → two-button CTA row → large product UI mockup. Below the hero, sections alternate between white-card grids and full-bleed colored accent panels. The logo wall is a centered single-row grid of greyscale partner logos. Feature blocks use a 2-column layout (text left, colored panel right) that alternates left-right between sections. The 'Ask your on-demand assistants' section uses a 2×2 card grid where the top card is full-width and the bottom row splits into two equal columns. Section gaps are generous (~80px) creating a calm vertical rhythm. Navigation is a fixed top bar at 64px height with centered nav items and right-aligned action buttons.
+Full-bleed dark canvas, max-width 1200px content container centered. Hero is a single centered illuminated wordmark ('AuthKit' in gradient display type) under a small eyebrow label, with three floating glass auth-form cards layered behind/below in an overlapping fan (left card tilted left, center card scaled largest, right card tilted right). Below the hero, a light/dark theme toggle sits centered. Feature row is a horizontal 6-icon timeline with thin connecting lines between circular icon tiles. Section rhythm: every section opens with a centered eyebrow label flanked by fading horizontal lines, then a large centered heading (44-48px), then a single line of muted body copy (16-18px), max ~640px width. Customization section features a mock browser-window frame with the auth card centered, surrounded by floating UI inspector panels (color swatches, radius sliders, logo icon picker, button text field, page background field) positioned at the corners of the canvas like a design-tool workspace.
 
 ## Agent Prompt Guide
 
-## Quick Color Reference
-- text: #000000 (build hierarchy through alpha: 100% / 95% / 60% / 40%)
-- background: #f6f5f4 (warm off-white canvas)
-- card surface: #ffffff
-- border: rgba(0, 0, 0, 0.08)
-- primary action: #0075de (filled action)
-- accent: #ffb110, #f64932, #62aef0, #02093a (rotate through these for card backgrounds)
+Quick Color Reference:
+- canvas: #05060f
+- surface (frosted glass card): rgba(186,214,247,0.03)
+- surface (elevated modal): rgba(5,6,15,0.97)
+- text (headline): #d8ecf8
+- text (body): #d1e4fa
+- text (muted): #c7d3ea
+- text (helper): #9da7ba
+- border (hairline): rgba(186,215,247,0.12)
+- accent / primary action: #663af3 (filled action)
 
-## Example Component Prompts
+Example Component Prompts:
 
-1. **Hero headline with highlight pill**: Render a centered hero on #f6f5f4. Headline: 'Where teams and agents Create together.' at 72px NotionInter weight 500, #000000, line-height 1.21, letter-spacing -2.016px. Wrap the word 'Create' in a pill: background #f6d5b8, text #000000, border-radius 9999px, padding 8px 24px, inline within the sentence. Subhead below at 18px Lyon Text weight 400, #615d59, line-height 1.56.
+1. Create a Primary Action Button: #663af3 background, #ffffff text, 9999px radius, compact pill padding. Use this filled treatment for the main CTA.
 
-2. **White feature card**: Create a card on the warm canvas. Background #ffffff, border-radius 12px, padding 24px, 1px solid border rgba(0,0,0,0.08). No shadow. Title at 22px NotionInter weight 700, #000000, letter-spacing -0.242px. Body at 16px weight 400, #615d59, line-height 1.5.
+2. Section eyebrow + heading stack: eyebrow is 15px dotDigital weight 400 letter-spacing 0.10em #c7d3ea, centered, flanked by fading horizontal lines (gradient from transparent to rgba(186,215,247,0.12) to transparent). Below, heading is 44px aeonikPro weight 500 in #d8ecf8, centered. Body below is 16px Untitled Sans 400 in #c7d3ea, max-width 640px centered.
 
-3. **Accent feature block**: Create a full-bleed colored panel. Background #ffb110, border-radius 12px, padding 24px. Title at 40px NotionInter weight 400, #000000, line-height 1.5. A product UI screenshot sits inside with a drop-shadow at 0px 4px 12px rgba(0,0,0,0.1) to create depth against the colored background.
+3. Feature icon tile row: six circular tiles (9999px radius, 56px), background rgba(186,214,247,0.06), outlined line-art icon centered in #d1e4fa, label below in 14px Untitled Sans #c7d3ea. Tiles connected by 1px horizontal line at rgba(186,215,247,0.12).
 
-4. Create a Primary Action Button: #0075de background, #ffffff text, 9999px radius, compact pill padding. Use this filled treatment for the main CTA.
+4. Ghost pill button: 999px radius, padding 8px 16px, background rgba(186,214,247,0.06), 1px inset border rgba(186,215,247,0.12), text #ffffff, 14px Untitled Sans weight 500.
 
-5. **Kanban task card (product mockup)**: Create a task card inside a product screenshot. Background #ffffff, border-radius 8px, padding 8px 12px, 1px solid border rgba(0,0,0,0.08). Task text at 14px NotionInter weight 500, #000000. Optional status pill above: background colored fill, text #ffffff, border-radius 9999px, padding 2px 8px, font 12px.
+5. Background canvas with grid: #05060f base, 1px grid lines at rgba(186,215,247,0.06) at 80px intervals, full-bleed, masked to fade at edges. Conic-gradient spotlight at top center: conic-gradient(at 50% -5%, transparent 45%, rgba(124,145,182,0.3) 49%, rgba(124,145,182,0.5) 50%, rgba(124,145,182,0.3) 51%, transparent 55%).
 
-## Decorative Marks System
+## Gradient System
 
-Character marks (round illustrated faces in 2px colored circles) and abstract decorative elements (squiggles, sparkles, arrows, flower shapes) are deployed as visual punctuation, not as illustrations with content. They cluster around hero copy, scatter near feature cards, and animate on scroll. Colors for the circle borders rotate through the accent palette: #097fe8 (blue), #f64932 (coral), #ffb110 (yellow), #62aef0 (sky). The marks are 40-48px circles with flat color illustrations inside, always on white fills. They never carry information or link to content — they exist purely to make the interface feel alive and handcrafted.
+The system uses three gradient layers stacked vertically: (1) Skywash linear gradient (#d8ecf8 → #98c0ef, 0deg) fills the display wordmark and largest headings; (2) Fading hairline gradients (transparent → rgba(186,215,247,0.12) → transparent) create the section divider lines flanking every eyebrow label; (3) Conic-gradient spotlight halos (transparent → rgba(124,145,182,0.5) → transparent) sit at the top of full-bleed sections as ambient illumination. All gradients are cool-tinted; never introduce warm gradients — the palette stays in the blue-violet spectrum.
 
 ## Similar Brands
 
-- **Linear** — Same monochrome-light approach with a single accent color, hairline-border cards, generous display typography with negative tracking, and zero shadows on content surfaces
-- **Stripe** — Same editorial use of serif+sans pairing, large display headlines with tight letter-spacing, and color reserved for functional emphasis rather than decoration
-- **Figma** — Same playful illustrated character marks as decorative punctuation, warm light canvas, and rotating accent hues for section variety
-- **Craft Docs** — Same paper-warm aesthetic with off-white canvas, restrained color palette, and a focus on the document-as-surface metaphor
+- **Linear** — Same near-black canvas, monochromatic blue-white text, single vivid violet as the only chromatic accent, and floating glass-morphism product cards
+- **Vercel** — Dark-first marketing surfaces with gradient-filled display type, frosted glass UI mockups, and minimal hairline borders at low opacity
+- **Clerk** — Devtools auth-product landing with dark canvas, glass-card auth-form mockups as the hero visual, and monochrome-with-one-accent palette
+- **Radix** — Companion brand — shares the WorkOS/Radix visual lineage with blueprint-grid backgrounds, frosted surfaces, and dot-tracked all-caps eyebrow labels
+- **Stripe** — Gradient-filled display headings on dark backgrounds, translucent glass cards as product showcases, and restrained palette with one signature accent
 
 ## Quick Start
 
@@ -254,54 +289,53 @@ Character marks (round illustrated faces in 2px colored circles) and abstract de
 ```css
 :root {
   /* Colors */
-  --color-notion-blue: #0075de;
-  --color-paper-warmth: #f6f5f4;
+  --color-midnight-canvas: #05060f;
+  --color-steel-plate: #2f343e;
+  --color-fog-veil: #9da7ba;
+  --color-moon-mist: #c7d3ea;
+  --color-frost-glow: #d1e4fa;
+  --color-ice-highlight: #d8ecf8;
+  --gradient-ice-highlight: linear-gradient(0deg, #d8ecf8 0%, #98c0ef 100%);
   --color-pure-white: #ffffff;
-  --color-ink-black: #000000;
-  --color-charcoal: #111111;
-  --color-stone: #757575;
-  --color-graphite: #615d59;
-  --color-slate: #696969;
-  --color-sky-tint: #e6f3fe;
-  --color-marigold: #ffb110;
-  --color-coral: #f64932;
-  --color-saffron: #e89d01;
-  --color-vermillion: #e32d14;
-  --color-mocha: #b18164;
-  --color-signal-blue: #097fe8;
-  --color-sky-wash: #62aef0;
-  --color-midnight-ink: #02093a;
+  --color-void-violet: #663af3;
+  --color-blueprint-blue: #b6d9fc;
+  --color-ember-glow: #e46d4c;
+  --color-signal-blue: #027dea;
+  --color-deep-teal: #269684;
+  --color-gridline-blue: #3f4959;
+  --color-glass-edge: #bad7f71f;
+  --color-luminous-fill: #c7d3ea1f;
 
   /* Typography — Font Families */
-  --font-notioninter: 'NotionInter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  --font-lyon-text: 'Lyon Text', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-untitled-sans: 'Untitled Sans', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-aeonikpro: 'aeonikPro', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-dotdigital: 'dotDigital', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 
   /* Typography — Scale */
   --text-caption: 12px;
   --leading-caption: 1.33;
-  --tracking-caption: 0.12px;
+  --tracking-caption: 0px;
   --text-body-sm: 14px;
   --leading-body-sm: 1.43;
+  --tracking-body-sm: 0px;
   --text-body: 16px;
   --leading-body: 1.5;
-  --text-subheading: 20px;
-  --leading-subheading: 1;
-  --text-heading-sm: 22px;
-  --leading-heading-sm: 1.27;
-  --tracking-heading-sm: -0.242px;
-  --text-heading: 40px;
-  --leading-heading: 1.5;
-  --text-heading-lg: 48px;
-  --leading-heading-lg: 1.5;
-  --text-display-sm: 54px;
-  --leading-display-sm: 1.04;
-  --tracking-display-sm: -1.89px;
-  --text-display: 72px;
-  --leading-display: 1.21;
-  --tracking-display: -2.016px;
-  --text-display-lg: 96px;
-  --leading-display-lg: 1.04;
-  --tracking-display-lg: -4.608px;
+  --tracking-body: -0.16px;
+  --text-subheading: 18px;
+  --leading-subheading: 1.33;
+  --tracking-subheading: 0px;
+  --text-heading-sm: 24px;
+  --leading-heading-sm: 1.17;
+  --tracking-heading-sm: -0.24px;
+  --text-heading: 28px;
+  --leading-heading: 1.14;
+  --tracking-heading: 0px;
+  --text-heading-lg: 44px;
+  --leading-heading-lg: 1.16;
+  --tracking-heading-lg: 0px;
+  --text-display: 48px;
+  --leading-display: 1.17;
+  --tracking-display: 0px;
 
   /* Typography — Weights */
   --font-weight-regular: 400;
@@ -317,35 +351,59 @@ Character marks (round illustrated faces in 2px colored circles) and abstract de
   --spacing-16: 16px;
   --spacing-20: 20px;
   --spacing-24: 24px;
-  --spacing-28: 28px;
   --spacing-32: 32px;
   --spacing-36: 36px;
-  --spacing-64: 64px;
-  --spacing-80: 80px;
+  --spacing-40: 40px;
+  --spacing-48: 48px;
+  --spacing-56: 56px;
+  --spacing-100: 100px;
+  --spacing-120: 120px;
+  --spacing-200: 200px;
 
   /* Layout */
-  --page-max-width: 1440px;
-  --section-gap: 80px;
+  --page-max-width: 1200px;
+  --section-gap: 120px;
   --card-padding: 24px;
-  --element-gap: 8px;
+  --element-gap: 16px;
 
   /* Border Radius */
-  --radius-md: 4px;
-  --radius-lg: 8px;
-  --radius-xl: 12px;
-  --radius-full: 9999px;
+  --radius-sm: 2px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius-2xl: 16px;
+  --radius-3xl: 24px;
+  --radius-3xl-2: 28px;
+  --radius-3xl-3: 44px;
+  --radius-full: 999px;
+  --radius-full-2: 4999.5px;
+  --radius-full-3: 9999px;
 
   /* Named Radii */
-  --radius-cards: 12px;
-  --radius-pills: 9999px;
-  --radius-small: 4px;
-  --radius-buttons: 8px;
+  --radius-cards: 16px;
+  --radius-badges: 6px;
+  --radius-inputs: 6px;
+  --radius-modals: 16px;
+  --radius-buttons: 999px;
+  --radius-iconcontainers: 9999px;
+
+  /* Shadows */
+  --shadow-sm: rgba(186, 207, 247, 0.32) 0px 0px 6px 0px;
+  --shadow-md: rgba(238, 186, 247, 0.24) 0px 0px 12px 0px;
+  --shadow-subtle: rgba(186, 215, 247, 0.12) 0px 0px 0px 1px inset;
+  --shadow-subtle-2: rgba(199, 211, 234, 0.12) -0.5px 0.5px 1px 0px inset, rgba(186, 215, 247, 0.08) 0px 0px 96px 0px inset;
+  --shadow-subtle-3: rgba(186, 214, 247, 0.06) 0px 0px 0px 1px inset;
+  --shadow-subtle-4: rgba(199, 211, 234, 0.12) 0px 1px 1px 0px inset, rgba(199, 211, 234, 0.05) 0px 24px 48px 0px inset, rgba(6, 6, 14, 0.7) 0px 24px 32px 0px;
+  --shadow-subtle-5: rgba(255, 255, 255, 0.1) 0px 0px 0px 1px inset;
+  --shadow-subtle-6: rgba(216, 236, 248, 0.2) 0px 1px 1px 0px inset, rgba(168, 216, 245, 0.06) 0px 24px 48px 0px inset, rgba(0, 0, 0, 0.3) 0px 16px 32px 0px;
+  --shadow-subtle-7: rgba(216, 236, 248, 0.2) 0px 1px 1px 0px inset, rgba(168, 216, 245, 0.06) 0px 24px 48px 0px inset;
+  --shadow-subtle-8: rgba(216, 236, 248, 0.2) 0px 1px 1px 0px inset, rgba(168, 216, 245, 0.06) 0px 24px 48px 0px inset, rgba(199, 211, 234, 0.08) 0px 0px 0px 1px inset;
+  --shadow-subtle-9: rgba(186, 214, 247, 0.24) 0px 0px 0px 1px inset;
 
   /* Surfaces */
-  --surface-page-canvas: #f6f5f4;
-  --surface-card-surface: #ffffff;
-  --surface-accent-card-surface: #ffb110;
-  --surface-dark-card-surface: #02093a;
+  --surface-midnight-canvas: #05060f;
+  --surface-steel-plate: #2f343;
+  --surface-frosted-glass: #bad6f708;
+  --surface-deep-glass: #05060ff7;
 }
 ```
 
@@ -354,54 +412,52 @@ Character marks (round illustrated faces in 2px colored circles) and abstract de
 ```css
 @theme {
   /* Colors */
-  --color-notion-blue: #0075de;
-  --color-paper-warmth: #f6f5f4;
+  --color-midnight-canvas: #05060f;
+  --color-steel-plate: #2f343e;
+  --color-fog-veil: #9da7ba;
+  --color-moon-mist: #c7d3ea;
+  --color-frost-glow: #d1e4fa;
+  --color-ice-highlight: #d8ecf8;
   --color-pure-white: #ffffff;
-  --color-ink-black: #000000;
-  --color-charcoal: #111111;
-  --color-stone: #757575;
-  --color-graphite: #615d59;
-  --color-slate: #696969;
-  --color-sky-tint: #e6f3fe;
-  --color-marigold: #ffb110;
-  --color-coral: #f64932;
-  --color-saffron: #e89d01;
-  --color-vermillion: #e32d14;
-  --color-mocha: #b18164;
-  --color-signal-blue: #097fe8;
-  --color-sky-wash: #62aef0;
-  --color-midnight-ink: #02093a;
+  --color-void-violet: #663af3;
+  --color-blueprint-blue: #b6d9fc;
+  --color-ember-glow: #e46d4c;
+  --color-signal-blue: #027dea;
+  --color-deep-teal: #269684;
+  --color-gridline-blue: #3f4959;
+  --color-glass-edge: #bad7f71f;
+  --color-luminous-fill: #c7d3ea1f;
 
   /* Typography */
-  --font-notioninter: 'NotionInter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  --font-lyon-text: 'Lyon Text', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-untitled-sans: 'Untitled Sans', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-aeonikpro: 'aeonikPro', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-dotdigital: 'dotDigital', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 
   /* Typography — Scale */
   --text-caption: 12px;
   --leading-caption: 1.33;
-  --tracking-caption: 0.12px;
+  --tracking-caption: 0px;
   --text-body-sm: 14px;
   --leading-body-sm: 1.43;
+  --tracking-body-sm: 0px;
   --text-body: 16px;
   --leading-body: 1.5;
-  --text-subheading: 20px;
-  --leading-subheading: 1;
-  --text-heading-sm: 22px;
-  --leading-heading-sm: 1.27;
-  --tracking-heading-sm: -0.242px;
-  --text-heading: 40px;
-  --leading-heading: 1.5;
-  --text-heading-lg: 48px;
-  --leading-heading-lg: 1.5;
-  --text-display-sm: 54px;
-  --leading-display-sm: 1.04;
-  --tracking-display-sm: -1.89px;
-  --text-display: 72px;
-  --leading-display: 1.21;
-  --tracking-display: -2.016px;
-  --text-display-lg: 96px;
-  --leading-display-lg: 1.04;
-  --tracking-display-lg: -4.608px;
+  --tracking-body: -0.16px;
+  --text-subheading: 18px;
+  --leading-subheading: 1.33;
+  --tracking-subheading: 0px;
+  --text-heading-sm: 24px;
+  --leading-heading-sm: 1.17;
+  --tracking-heading-sm: -0.24px;
+  --text-heading: 28px;
+  --leading-heading: 1.14;
+  --tracking-heading: 0px;
+  --text-heading-lg: 44px;
+  --leading-heading-lg: 1.16;
+  --tracking-heading-lg: 0px;
+  --text-display: 48px;
+  --leading-display: 1.17;
+  --tracking-display: 0px;
 
   /* Spacing */
   --spacing-4: 4px;
@@ -410,16 +466,38 @@ Character marks (round illustrated faces in 2px colored circles) and abstract de
   --spacing-16: 16px;
   --spacing-20: 20px;
   --spacing-24: 24px;
-  --spacing-28: 28px;
   --spacing-32: 32px;
   --spacing-36: 36px;
-  --spacing-64: 64px;
-  --spacing-80: 80px;
+  --spacing-40: 40px;
+  --spacing-48: 48px;
+  --spacing-56: 56px;
+  --spacing-100: 100px;
+  --spacing-120: 120px;
+  --spacing-200: 200px;
 
   /* Border Radius */
-  --radius-md: 4px;
-  --radius-lg: 8px;
-  --radius-xl: 12px;
-  --radius-full: 9999px;
+  --radius-sm: 2px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius-2xl: 16px;
+  --radius-3xl: 24px;
+  --radius-3xl-2: 28px;
+  --radius-3xl-3: 44px;
+  --radius-full: 999px;
+  --radius-full-2: 4999.5px;
+  --radius-full-3: 9999px;
+
+  /* Shadows */
+  --shadow-sm: rgba(186, 207, 247, 0.32) 0px 0px 6px 0px;
+  --shadow-md: rgba(238, 186, 247, 0.24) 0px 0px 12px 0px;
+  --shadow-subtle: rgba(186, 215, 247, 0.12) 0px 0px 0px 1px inset;
+  --shadow-subtle-2: rgba(199, 211, 234, 0.12) -0.5px 0.5px 1px 0px inset, rgba(186, 215, 247, 0.08) 0px 0px 96px 0px inset;
+  --shadow-subtle-3: rgba(186, 214, 247, 0.06) 0px 0px 0px 1px inset;
+  --shadow-subtle-4: rgba(199, 211, 234, 0.12) 0px 1px 1px 0px inset, rgba(199, 211, 234, 0.05) 0px 24px 48px 0px inset, rgba(6, 6, 14, 0.7) 0px 24px 32px 0px;
+  --shadow-subtle-5: rgba(255, 255, 255, 0.1) 0px 0px 0px 1px inset;
+  --shadow-subtle-6: rgba(216, 236, 248, 0.2) 0px 1px 1px 0px inset, rgba(168, 216, 245, 0.06) 0px 24px 48px 0px inset, rgba(0, 0, 0, 0.3) 0px 16px 32px 0px;
+  --shadow-subtle-7: rgba(216, 236, 248, 0.2) 0px 1px 1px 0px inset, rgba(168, 216, 245, 0.06) 0px 24px 48px 0px inset;
+  --shadow-subtle-8: rgba(216, 236, 248, 0.2) 0px 1px 1px 0px inset, rgba(168, 216, 245, 0.06) 0px 24px 48px 0px inset, rgba(199, 211, 234, 0.08) 0px 0px 0px 1px inset;
+  --shadow-subtle-9: rgba(186, 214, 247, 0.24) 0px 0px 0px 1px inset;
 }
 ```
