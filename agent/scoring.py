@@ -71,13 +71,16 @@ def direct_evidence(row: dict) -> bool:
     return bool(c["probe_unhealthy"] or c["broken_path"] or c["change_in_window"])
 
 
-def multiple_causes(rows: list[dict]) -> bool:
+def multiple_causes(rows: list[dict], victims: set[str] = frozenset()) -> bool:
     """Top two are close, or the runner-up has its own direct evidence of failure.
 
     The second rule is what flags S5: payments being down is direct evidence
     even though sg-db scores higher. A victim (degraded service, healthy host)
-    has no direct evidence, so S1-S3 stay single-cause.
+    has no direct evidence, so S1-S3 stay single-cause. `victims` are candidates
+    whose failure the top cause explains physically (a service running on a
+    stopped host, S7): they never count as a second cause.
     """
-    if len(rows) < 2 or rows[1]["score"] <= 0:
+    rest = [r for r in rows[1:] if r["rid"] not in victims]
+    if not rows or not rest or rest[0]["score"] <= 0:
         return False
-    return rows[0]["score"] - rows[1]["score"] < CLOSE_GAP or direct_evidence(rows[1])
+    return rows[0]["score"] - rest[0]["score"] < CLOSE_GAP or direct_evidence(rest[0])

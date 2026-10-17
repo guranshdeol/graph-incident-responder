@@ -99,7 +99,7 @@ def _live(name: str):
     """Lazily built boto3 clients for live mode, each with its own principal (ingest/worker.py)."""
     if name not in _live_clients:
         from ingest.worker import session  # boto3 only needed in live mode
-        prefix, service = {"executor_ec2": ("EXECUTOR", "ec2"), "executor_ssm": ("EXECUTOR", "ssm"),
+        prefix, service = {"executor_ec2": ("EXECUTOR", "ec2"), "executor_ssm": ("EXECUTOR", "ssm"), "executor_rds": ("EXECUTOR", "rds"),
                            "discovery_ec2": ("DISCOVERY", "ec2"), "discovery_rds": ("DISCOVERY", "rds")}[name]
         _live_clients[name] = session(prefix).client(service)
     return _live_clients[name]
@@ -364,7 +364,7 @@ def approve(action_id: str, background: BackgroundTasks, body: dict | None = Bod
         if not actions.approve(graph, action_id, actor=_actor(body), now=t):
             raise HTTPException(status_code=409, detail=f"action is {action['status']}, not proposed")
         executor = (actions.SandboxExecutor() if SANDBOX_MODE
-                    else actions.AwsExecutor(_live("executor_ec2"), _live("executor_ssm")))
+                    else actions.AwsExecutor(_live("executor_ec2"), _live("executor_ssm"), _live("executor_rds")))
         try:
             actions.execute(graph, action_id, executor, now=t)
         except Exception as exc:

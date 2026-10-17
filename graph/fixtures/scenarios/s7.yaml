@@ -1,0 +1,36 @@
+# S7: someone STOPS host-2 in the console. orders and reports go down with it; web errors via orders.
+# SYNTHETIC FIXTURE. Discovery records InstanceStateChanged (running -> stopped).
+id: s7
+title: Instance stopped
+faults:
+  - stop_instance: {rid: i-host2}
+  - cloudtrail:
+      event_name: StopInstances
+      actor: arn:aws:iam::111122223333:user/alice
+      rids: [i-host2]
+      at_offset: -100
+      request: {instancesSet: {items: [{instanceId: i-host2}]}}
+alerts:
+  - {alertname: ServiceDown, rid: "svc:orders", severity: page}
+  - {alertname: ServiceDown, rid: "svc:reports", severity: page}
+  - {alertname: HighErrorRate, rid: "svc:web", severity: page}
+  - {alertname: HostDown, rid: i-host2, severity: page}
+probes:
+  "svc:web":      {up: 1, error_rate: 0.50, p95: 0.40}
+  "svc:checkout": {up: 1, error_rate: 0.00, p95: 0.10}
+  "svc:payments": {up: 1, error_rate: 0.00, p95: 0.10}
+  "svc:orders":   {up: 0}
+  "svc:reports":  {up: 0}
+  i-host1:        {up: 1, cpu: 20}
+  i-host2:        {up: 0}
+  "rds:orders-db": {reachable_from: {i-host1: 1}}
+probes_after_fix:
+  "svc:web":      {up: 1, error_rate: 0.00, p95: 0.10}
+  "svc:orders":   {up: 1, error_rate: 0.00, p95: 0.10}
+  "svc:reports":  {up: 1, error_rate: 0.00, p95: 0.10}
+  i-host2:        {up: 1, cpu: 15}
+  "rds:orders-db": {reachable_from: {i-host1: 1, i-host2: 1}}
+expect:
+  top: i-host2
+  action: start_instance
+  multiple_causes: false

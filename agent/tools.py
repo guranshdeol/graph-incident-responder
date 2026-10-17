@@ -185,5 +185,23 @@ class Tools:
         )
 
 
+    def detached_on_path(self, from_svc: str, to_rid: str, minutes: int = 30, now: int | None = None) -> dict:
+        """On a broken path: was a security group detached from the dependency's host or target?"""
+        args = {"from_svc": from_svc, "to_rid": to_rid, "minutes": minutes}
+        rids, unknown = self._resolve_all([from_svc, to_rid])
+        if unknown:
+            return _envelope("detached_on_path", args, UNKNOWN, rows=[{"unknown": u} for u in unknown])
+        now = int(time.time()) if now is None else int(now)
+        return self._run("detached_on_path", args, "q23_detached_on_path",
+                         {"from": rids[0], "to": rids[1], "since": now - int(minutes) * 60},
+                         paths_from=lambda rows: [[r["firewall"], r["target"]] for r in rows])
+
+    def changes_since(self, minutes: int = 30, limit: int = 20, now: int | None = None) -> dict:
+        """Every change anywhere in the estate (CloudTrail + graph diff) in the last `minutes`, newest first."""
+        args = {"minutes": minutes}
+        now = int(time.time()) if now is None else int(now)
+        return self._run("changes_since", args, "q24_changes_since",
+                         {"since": now - int(minutes) * 60, "limit": max(1, min(int(limit), 50))})
+
 def tools_for(graph_name: str | None = None) -> Tools:
     return Tools(db.graph(graph_name))

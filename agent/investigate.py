@@ -86,12 +86,16 @@ class Investigator:
                 culprits = {}
                 for r in (rm["rows"] if rm["outcome"] == ANSWERED else []):   # Q10 is newest first: keep each firewall's latest removal
                     culprits.setdefault(r["firewall"], r)
-                fws = list(culprits) or [f["firewall"] for f in row["per_firewall"]]
+                detached = []
+                if not culprits:   # no rule went away: was a security group detached from the host or the target?
+                    dt = self._call(self.tools.detached_on_path(*pair, minutes=WINDOW_MINUTES, now=now))
+                    detached = dt["rows"] if dt["outcome"] == ANSWERED else []
+                fws = list(culprits) or ([] if detached else [f["firewall"] for f in row["per_firewall"]])
                 src_row = by_rid.get(src, {"explains": [src] if src in alerting else [], "min_hops": 0})
                 # the source's host also suffers if an alert there targets the dependency (blackbox)
                 host_alerts = {a["rid"] for a in firing if a["rid"] == row["host"] and a["target_rid"] == dep["target"]}
                 broken_paths.append({"from": src, "to": dep["target"], "host": row["host"], "port": row["port"],
-                                     "firewalls": fws, "culprit_rules": list(culprits.values())})
+                                     "firewalls": fws, "culprit_rules": list(culprits.values()), "detached": detached})
                 for fw in fws:
                     c = cands.setdefault(fw, scoring.Candidate(rid=fw, kinds=["Resource", "Firewall"],
                                                                min_hops=src_row["min_hops"] + 1))
@@ -99,10 +103,20 @@ class Investigator:
                     c.explains |= set(src_row["explains"]) | host_alerts
                     c.min_hops = min(c.min_hops, src_row["min_hops"] + 1)
                     rule = culprits.get(fw)
-                    c.evidence.append(
-                        f"path {src} -> {dep['target']}:{row['port']} blocked at {fw}"
-                        + (f"; rule {rule['original_rule_id']} ({rule['proto']} {rule['port_from']} from "
-                           f"{rule['source']}) removed" if rule else ""))
+                    if rule and "@" in rule["rule_id"]:
+                        what = f"; rule {rule['original_rule_id']} was edited (it allowed {rule['proto']} {rule['port_from']} from {rule['source']})"
+                    elif rule:
+                        what = f"; rule {rule['original_rule_id']} ({rule['proto']} {rule['port_from']} from {rule['source']}) removed"
+                    else:
+                        what = ""
+                    c.evidence.append(f"path {src} -> {dep['target']}:{row['port']} blocked at {fw}" + what)
+                for d in detached:   # the culprit is the instance/database that lost its security group
+                    hops = src_row["min_hops"] + (0 if d["target"] == row["host"] else 1)
+                    c = cands.setdefault(d["target"], scoring.Candidate(rid=d["target"], kinds=d["target_kinds"], min_hops=hops))
+                    c.broken_path = True
+                    c.explains |= set(src_row["explains"]) | host_alerts
+                    c.min_hops = min(c.min_hops, hops)
+                    c.evidence.append(f"path {src} -> {dep['target']}:{row['port']} blocked: security group {d['firewall']} was detached from {d['target']}")
 
         # 4 evidence
         change_ids: dict[str, str] = {}
@@ -134,7 +148,15 @@ class Investigator:
         db.run(self.g, "w7a_clear_suspects", {"id": incident_id})
         db.run(self.g, "w7_write_suspects",
                {"id": incident_id, "rows": [{"rid": r["rid"], "score": r["score"], "rank": r["rank"]} for r in rows]})
-        multiple = scoring.multiple_causes(rows)
+        # services that run on a down top-ranked host are its victims, not a second cause
+        victims = set()
+        if rows and "Compute" in rows[0]["kinds"] and rows[0]["probe"] == "unhealthy":
+            for r in rows[1:]:
+                if "Service" in r["kinds"]:
+                    _, hs = db.run(self.g, "q16_service_host", {"rid": r["rid"]})
+                    if hs and hs[0]["host"] == rows[0]["rid"]:
+                        victims.add(r["rid"])
+        multiple = scoring.multiple_causes(rows, victims)
         causes = rows[:2] if multiple else rows[:1]
 
         # 7 explain: the LLM agent may run its own read tools (with reasons) and re-rank only
@@ -176,13 +198,21 @@ class Investigator:
     def _propose(self, incident_id, cause, broken_paths, recalled, now) -> dict:
         kinds = cause["kinds"]
         prior = next((r for r in recalled if r["root_cause"] == cause["rid"] and r["fix"]), None)
+        # the fix undoes the change that was found: a removed rule is re-added, an edited rule is edited back,
+        # a detached security group is re-attached, a stopped instance is started, a stopped container restarted
+        det = next(((b, d) for b in broken_paths for d in b.get("detached", []) if d["target"] == cause["rid"]), None)
         if "Firewall" in kinds:
-            kind = "restore_firewall_rule"
             bp = next((b for b in broken_paths if cause["rid"] in b["firewalls"]), None)
             rule = next((r for r in (bp or {}).get("culprit_rules", []) if r["firewall"] == cause["rid"]), None)
+            kind = "revert_rule_edit" if rule and "@" in rule["rule_id"] else "restore_firewall_rule"
             hint = {"rule_id": rule["rule_id"] if rule else None, "path": [bp["from"], bp["to"]] if bp else None}
         elif "Service" in kinds:
             kind, hint = "restart_service", None
+        elif det and ("Compute" in kinds or "Database" in kinds):
+            b, d = det
+            kind, hint = "reattach_security_group", {"firewall": d["firewall"], "path": [b["from"], b["to"]]}
+        elif "Compute" in kinds and actions.state_of(self.g, cause["rid"]) in ("stopped", "stopping"):
+            kind, hint = "start_instance", None
         else:
             return {"rid": cause["rid"], "action": None,
                     "reason": f"no catalogued safe action for {cause['rid']} ({', '.join(k for k in kinds if k != 'Resource')}); a human should look"}

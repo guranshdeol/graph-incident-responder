@@ -67,10 +67,31 @@ class Scenario:
             "actor": actor, "at": at, "by_agent": False,
             "request_json": json.dumps(request or {}), "rids": rids})
 
+    def _modify_rule(self, fw: str, rule_id: str, port_from: int, port_to: int, source: str | None = None):
+        """Someone edits a rule in place (same id, new port/source): discovery's W1b + W1, as on live."""
+        _, rules = db.run(self.g, "q15_active_rules_on_firewall", {"fw": fw})
+        for r in rules:
+            new = r["rule_id"] == rule_id
+            params = {"fw": fw, "rule_id": r["rule_id"], "proto": r["proto"], "from_port": port_from if new else r["port_from"],
+                      "to_port": port_to if new else r["port_to"], "src_rid": (source or r["source"]) if new else r["source"], "sync_ts": self.now}
+            db.run(self.g, "w1b_detect_modified_rule", params); db.run(self.g, "w1_upsert_rule", params)
+
+    def _detach_sg(self, fw: str, target: str):
+        """Someone removes a security group from an instance/database: discovery's W24 diff."""
+        db.run(self.g, "w27_set_protects", {"fw": fw, "target": target, "active": False, "ts": self.now})
+        db.run(self.g, "w3_ingest_change", {"event_id": f"diff:detach:{fw}:{target}:{self.now}", "event_name": "SecurityGroupDetached",
+                                            "actor": None, "at": self.now, "by_agent": False, "request_json": "{}", "rids": [target, fw]})
+
+    def _stop_instance(self, rid: str):
+        """Someone stops an instance: discovery's W25 state diff."""
+        db.run(self.g, "w25_state_change", {"rid": rid, "state": "stopped", "sync_ts": self.now})
+        db.run(self.g, "w26_set_state", {"rid": rid, "state": "stopped"})
+
     def inject_faults(self):
         for fault in self.spec.get("faults", []):
             (kind, args), = fault.items()
-            {"revoke_rule": self._revoke_rule, "cloudtrail": self._cloudtrail}[kind](**args)
+            {"revoke_rule": self._revoke_rule, "cloudtrail": self._cloudtrail, "modify_rule": self._modify_rule,
+             "detach_sg": self._detach_sg, "stop_instance": self._stop_instance}[kind](**args)
 
     # -- alerts ---------------------------------------------------------------
 

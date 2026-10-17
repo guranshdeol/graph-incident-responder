@@ -1,0 +1,36 @@
+# S8: someone REMOVES host-1's security group from the instance (console: Change security groups).
+# No rule changed, yet host-1 can no longer reach orders-db: rule A only allows members of sg-host1.
+# SYNTHETIC FIXTURE. Discovery records SecurityGroupDetached; CloudTrail ModifyInstanceAttribute.
+id: s8
+title: Security group detached
+faults:
+  - detach_sg: {fw: sg-host1, target: i-host1}
+  - cloudtrail:
+      event_name: ModifyInstanceAttribute
+      actor: arn:aws:iam::111122223333:user/alice
+      rids: [i-host1]
+      at_offset: -80
+      request: {instanceId: i-host1, groupSet: {items: [{groupId: sg-default}]}}
+alerts:
+  - {alertname: HighErrorRate, rid: "svc:web", severity: page}
+  - {alertname: HighErrorRate, rid: "svc:checkout", severity: page}
+  - {alertname: HighErrorRate, rid: "svc:payments", severity: page}
+  - {alertname: DependencyUnreachable, rid: i-host1, target_rid: "rds:orders-db", severity: page}
+probes:
+  "svc:web":      {up: 1, error_rate: 0.55, p95: 0.30}
+  "svc:checkout": {up: 1, error_rate: 0.60, p95: 0.30}
+  "svc:payments": {up: 1, error_rate: 0.95, p95: 0.20}
+  "svc:orders":   {up: 1, error_rate: 0.00, p95: 0.08}
+  "svc:reports":  {up: 1, error_rate: 0.00, p95: 0.10}
+  i-host1:        {up: 1, cpu: 22}
+  i-host2:        {up: 1, cpu: 18}
+  "rds:orders-db": {reachable_from: {i-host1: 0, i-host2: 1}}
+probes_after_fix:
+  "svc:web":      {up: 1, error_rate: 0.00, p95: 0.10}
+  "svc:checkout": {up: 1, error_rate: 0.00, p95: 0.10}
+  "svc:payments": {up: 1, error_rate: 0.00, p95: 0.10}
+  "rds:orders-db": {reachable_from: {i-host1: 1, i-host2: 1}}
+expect:
+  top: i-host1
+  action: reattach_security_group
+  multiple_causes: false

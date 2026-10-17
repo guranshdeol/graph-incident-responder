@@ -1,8 +1,11 @@
 // Q4 check_path (v2): verdict across ALL firewalls on the target. Params: $from, $to
+// Only ACTIVE attachments count: a security group detached from the host or target no longer protects or permits it.
 MATCH (x:Service {rid: $from})-[:RUNS_ON]->(h:Compute)
 MATCH (x)-[d:DEPENDS_ON]->(y:Resource {rid: $to})
-MATCH (fw:Firewall)-[:PROTECTS]->(y)
-OPTIONAL MATCH (hfw:Firewall)-[:PROTECTS]->(h)
+MATCH (fw:Firewall)-[pt:PROTECTS]->(y)
+WHERE coalesce(pt.active, true)
+OPTIONAL MATCH (hfw:Firewall)-[ph:PROTECTS]->(h)
+WHERE coalesce(ph.active, true)
 WITH h, d, collect(DISTINCT fw) AS target_fws, collect(DISTINCT hfw) AS host_fws
 UNWIND target_fws AS fw
 OPTIONAL MATCH (fw)-[r:ALLOWS_FROM]->(src)

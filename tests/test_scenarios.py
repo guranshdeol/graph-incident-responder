@@ -80,7 +80,7 @@ def test_s1_sg_rule_revoked(g):
     assert "sg-db-admin" not in [r["rid"] for r in rep["scorecard"]]
     assert rep["broken_paths"] == [{
         "from": "svc:payments", "to": "rds:orders-db", "host": "i-host1", "port": 5432, "firewalls": ["sg-db"],
-        "culprit_rules": rep["broken_paths"][0]["culprit_rules"]}]
+        "culprit_rules": rep["broken_paths"][0]["culprit_rules"], "detached": []}]
     assert rep["root_change_id"]
 
 
@@ -262,3 +262,35 @@ def test_late_reinvestigation_reuses_the_approved_action(g):
     assert rep2["proposals"][0]["action"]["id"] == act["id"] and rep2["proposals"][0]["action"]["status"] == "approved"
     n = g.query("MATCH (x:Action)-[:FOR]->(:Incident {id: $id}) RETURN count(x)", {"id": rep["incident_id"]}).result_set[0][0]
     assert n == 1
+
+
+# -- manual changes beyond a removed rule (S6-S8) -----------------------------------
+
+@pytest.mark.parametrize("name, top, kind, cli_bit", [
+    ("s6", "sg-db", "revert_rule_edit", "FromPort=5432,ToPort=5432"),
+    ("s7", "i-host2", "start_instance", "start-instances --instance-ids i-host2"),
+    ("s8", "i-host1", "reattach_security_group", "--groups sg-host1"),
+])
+def test_manual_change_is_found_and_undone(g, name, top, kind, cli_bit):
+    sc, rep = investigate(g, name)
+    assert rep["top"] == top and not rep["multiple_causes"]
+    act = rep["proposals"][0]["action"]
+    assert act["kind"] == kind and cli_bit in act["params"]["aws_cli"]
+    assert row(rep, top)["components"]["change_in_window"] == 1          # the change itself is evidence
+    actions.approve(g, act["id"], "oncall@team", NOW + 10)
+    actions.execute(g, act["id"], actions.SandboxExecutor(), NOW + 20)
+    sc.recover(NOW + 30)
+    assert actions.verify(g, Tools(g), sc.probes, act["id"], now=lambda: NOW + 40, timeout=0)["verified"]
+
+
+def test_s6_edit_keeps_history_and_reverts_the_same_rule(g):
+    _, rep = investigate(g, "s6")
+    p = rep["proposals"][0]["action"]["params"]
+    assert p["rule_id"] == "sgr-a" and p["before"] == "tcp 5432-5432 from sg-host1" and p["now"] == "tcp 5433-5433 from sg-host1"
+
+
+def test_s8_detach_blames_the_instance_not_the_db_firewall(g):
+    _, rep = investigate(g, "s8")
+    assert rep["broken_paths"][0]["detached"][0]["firewall"] == "sg-host1"
+    assert "sg-db" not in [r["rid"] for r in rep["scorecard"]]
+    assert row(rep, "i-host1")["probe"] == "healthy"       # healthy host, still the cause: its group was removed

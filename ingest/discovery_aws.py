@@ -7,6 +7,8 @@ Per security group, every ingress rule goes through W1b (detect an in-place edit
 retire the old edge, record SecurityGroupRuleModified) then W1 (upsert). After the
 group's rules, W2 retires rules that were not seen (SecurityGroupRuleRemoved).
 Removed rules are never deleted: their history is what restore_firewall_rule uses.
+The same goes for security-group attachments (W24: SecurityGroupDetached) and instance states
+(W25: InstanceStateChanged, e.g. running -> stopped): each becomes a Change with before/after.
 Resources not seen at all are marked state='missing' (W21), never deleted.
 
 Rule sources (§5): SG reference -> that Firewall; 0.0.0.0/0 -> Internet;
@@ -105,6 +107,8 @@ def sync(g, snap: dict, services: dict | None = None, sync_ts: int | None = None
         for ip in (i.get("PrivateIpAddress"), i.get("PublicIpAddress")):
             if ip:
                 ip_to_instance[ip] = rid
+        _, st_ch = db.run(g, "w25_state_change", {"rid": rid, "state": state, "sync_ts": ts})
+        changes += [{"event_name": "InstanceStateChanged", "resource": rid, "before": r["before"], "after": state} for r in st_ch]
         db.run(g, "w13_upsert_compute", {"rid": rid, "name": name, "private_ip": i.get("PrivateIpAddress"),
                                          "public_ip": i.get("PublicIpAddress"), "state": state,
                                          "instance_type": i.get("InstanceType"), "subnet_rid": i.get("SubnetId"),
@@ -122,6 +126,10 @@ def sync(g, snap: dict, services: dict | None = None, sync_ts: int | None = None
                                           "status": d.get("DBInstanceStatus"), "subnet_rids": subnets, "sync_ts": ts})
         for sg in d.get("VpcSecurityGroups", []):
             db.run(g, "w16_protects", {"fw": sg["VpcSecurityGroupId"], "target": rid, "sync_ts": ts})
+
+    # security groups detached from an instance or database since the last sync (W24)
+    _, det = db.run(g, "w24_diff_detached", {"sync_ts": ts})
+    changes += [{"event_name": "SecurityGroupDetached", "firewall": r["firewall"], "resource": r["target"]} for r in det]
 
     # rules: W1b (modified?) then W1 (upsert), per group; then W2 (removed)
     by_group: dict[str, list] = {gid: [] for gid in sg_ids}

@@ -3,8 +3,10 @@
 // port? Same matching as Q4, but over inactive rules. Params: $from, $to, $since
 MATCH (x:Service {rid: $from})-[:RUNS_ON]->(h:Compute)
 MATCH (x)-[d:DEPENDS_ON]->(y:Resource {rid: $to})
-MATCH (fw:Firewall)-[:PROTECTS]->(y)
-OPTIONAL MATCH (hfw:Firewall)-[:PROTECTS]->(h)
+MATCH (fw:Firewall)-[pt:PROTECTS]->(y)
+WHERE coalesce(pt.active, true)
+OPTIONAL MATCH (hfw:Firewall)-[ph:PROTECTS]->(h)
+WHERE coalesce(ph.active, true)
 WITH h, d, fw, collect(DISTINCT hfw) AS host_fws
 MATCH (fw)-[r:ALLOWS_FROM]->(src)
 WHERE r.active = false AND r.removed_at >= $since
