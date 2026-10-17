@@ -53,6 +53,25 @@ Fixture scores from `tests/test_scenarios.py` (`graph/fixtures/scenarios/`):
 
 S5 is a documented limitation. The scorecard ranks the causes but does not split the alerts between them.
 
+## Live on real AWS
+
+rootgraph ran end to end on a real AWS account on 17 Oct 2026 (Sydney, `ap-southeast-2`; the team's AWS Organization allows only that region). `demo/aws/estate.py up` created the estate; discovery built `ops_live` in 5 s (2 hosts, 1 database, 5 security groups, 7 networks, 5 services, 6 dependencies).
+
+Clean run, measured (incident `INC-2f75fef8`):
+
+| Step | Time (UTC) |
+|---|---|
+| Rule A revoked (host-1 → orders-db:5432) | 06:58:23 |
+| Real Prometheus/Alertmanager alerts open an incident | 06:58:59 (+36 s) |
+| Full investigation: root cause = the db security group, 7.75 (broken path + change + memory); host-1 1.0, probe healthy; 2 agent-chosen calls | 06:59:55 |
+| Memory: recalled `INC-a994b5d4` (same cause, resolved 10 min earlier) and pre-filled the fix | same report |
+| A person approves; the executor re-adds the exact rule (`AuthorizeSecurityGroupIngress` by `rootgraph-executor`, marked `by_agent`) | 07:00:37 |
+| Alerts resolved, verification passed, incident closed | 07:01:40 (162 s from incident open) |
+
+On an earlier run, CloudTrail's `RevokeSecurityGroupIngress` (with the actor) reached the graph through EventBridge → SQS in 4 s, and the graph diff recorded the removal 10 s after the change. The live runs also found five bugs the fake-AWS tests could not (webhook blocked behind a slow investigation, re-investigation after approval, repeated notifications opening a second incident, a 120 s verification window that was too short, a duplicate proposal from a late re-investigation); all are fixed, with regression tests (see DECISIONS.md).
+
+The live page is `https://172-232-86-149.sslip.io/live/` (operator token required). How to check everything yourself: [docs/CHECKING.md](docs/CHECKING.md).
+
 ## Architecture
 
 ```mermaid

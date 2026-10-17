@@ -32,7 +32,7 @@ CREDS = HERE / "credentials.env"
 PATTERN = json.loads((HERE / "eventbridge-pattern.json").read_text())
 REGION = os.environ.get("AWS_REGION", "ap-southeast-2")   # this team's AWS org allows only Sydney (SCP)
 TAG = {"Key": "rootgraph", "Value": "demo"}
-SECRET_KEYS = {"db_password", "users"}  # never printed
+SECRET_KEYS = {"db_password", "users", "chaos"}  # never printed
 AMI_PARAM = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64"
 COMPOSE_VERSION = "v2.29.7"
 
@@ -89,7 +89,7 @@ class Estate:
 
     # -- up --------------------------------------------------------------------------
 
-    def up(self, email: str | None, control_plane_cidr: str) -> dict:
+    def up(self, email: list[str] | str | None, control_plane_cidr: str) -> dict:
         st = load_state()
         e = self.ec2
         if email:
@@ -137,6 +137,7 @@ class Estate:
         step(st, "rule", lambda: self._rule(queue))
 
         users = step(st, "users", lambda: self._users(sg_db, queue))
+        step(st, "chaos", lambda: self._chaos_user(sg_db))
         self._write_credentials(st, users, queue)
         if self.wait:
             print("waiting for instances and orders-db (RDS takes ~10 min)...")
@@ -145,7 +146,8 @@ class Estate:
         print(f"done. Append {CREDS.relative_to(Path.cwd()) if CREDS.is_relative_to(Path.cwd()) else CREDS} to the server's .env")
         return st
 
-    def _budget(self, email: str) -> str:
+    def _budget(self, email: list[str] | str) -> str:
+        emails = [email] if isinstance(email, str) else list(email)
         self.budgets.create_budget(
             AccountId=self.account,
             Budget={"BudgetName": "rootgraph-demo", "BudgetLimit": {"Amount": "10", "Unit": "USD"},
@@ -153,7 +155,7 @@ class Estate:
             NotificationsWithSubscribers=[{
                 "Notification": {"NotificationType": "ACTUAL", "ComparisonOperator": "GREATER_THAN",
                                  "Threshold": 80, "ThresholdType": "PERCENTAGE"},
-                "Subscribers": [{"SubscriptionType": "EMAIL", "Address": email}]}])
+                "Subscribers": [{"SubscriptionType": "EMAIL", "Address": e} for e in emails]}])
         return "rootgraph-demo"
 
     def _rules(self, h1: str, h2: str, db: str, cp: str) -> dict:
@@ -259,6 +261,18 @@ class Estate:
             out[user] = {"id": key["AccessKeyId"], "secret": key["SecretAccessKey"]}
         return out
 
+    def _chaos_user(self, sg_db: str) -> dict:
+        """The 'human who makes the bad change' for the site's Break-it button: it can ONLY revoke ingress
+        on the db security group (and read rules to find rule A). The agent's executor can only re-add."""
+        user = "rootgraph-chaos"
+        stmts = [{"Effect": "Allow", "Action": "ec2:RevokeSecurityGroupIngress",
+                  "Resource": f"arn:aws:ec2:{self.region}:{self.account}:security-group/{sg_db}"},
+                 {"Effect": "Allow", "Action": "ec2:DescribeSecurityGroupRules", "Resource": "*"}]
+        self.iam.create_user(UserName=user, Tags=[TAG])
+        self.iam.put_user_policy(UserName=user, PolicyName=user, PolicyDocument=json.dumps({"Version": "2012-10-17", "Statement": stmts}))
+        key = self.iam.create_access_key(UserName=user)["AccessKey"]
+        return {"id": key["AccessKeyId"], "secret": key["SecretAccessKey"]}
+
     def _write_credentials(self, st: dict, users: dict, queue: dict) -> None:
         lines = ["# rootgraph live AWS (from demo/aws/estate.py up). Append to the server's .env. Never commit.",
                  f"AWS_REGION={self.region}", f"CHANGES_QUEUE_URL={queue['url']}"]
@@ -266,6 +280,9 @@ class Estate:
                              ("rootgraph-executor", "EXECUTOR")):
             lines += [f"{prefix}_AWS_ACCESS_KEY_ID={users[user]['id']}", f"{prefix}_AWS_SECRET_ACCESS_KEY={users[user]['secret']}"]
         lines.append(f"ORDERS_DB_PASSWORD={st['db_password']}")
+        if st.get("chaos"):
+            lines += [f"CHAOS_AWS_ACCESS_KEY_ID={st['chaos']['id']}", f"CHAOS_AWS_SECRET_ACCESS_KEY={st['chaos']['secret']}",
+                      f"SG_DB={st['sg_db']}", f"SG_HOST1={st['sg_host1']}"]
         CREDS.write_text("\n".join(lines) + "\n")
         CREDS.chmod(0o600)
 
@@ -273,7 +290,7 @@ class Estate:
 
     def status(self) -> dict:
         st = load_state()
-        out = {k: v for k, v in st.items() if k not in ("users", "db_password")}
+        out = {k: v for k, v in st.items() if k not in SECRET_KEYS}
         if "host1" in st:
             res = self.ec2.describe_instances(InstanceIds=[st["host1"], st["host2"]])["Reservations"]
             out["instances"] = {i["InstanceId"]: (i["State"]["Name"], i.get("PublicIpAddress"))
@@ -294,7 +311,7 @@ class Estate:
                 print(f"  deleted {label}")
             except ClientError as exc:
                 print(f"  {label}: {exc.response['Error']['Code']}")
-        for user in st.get("users", {}):
+        for user in list(st.get("users", {})) + (["rootgraph-chaos"] if st.get("chaos") else []):
             for k in self.iam.list_access_keys(UserName=user)["AccessKeyMetadata"]:
                 attempt(f"key {user}", lambda k=k: self.iam.delete_access_key(UserName=user, AccessKeyId=k["AccessKeyId"]))
             attempt(f"policy {user}", lambda u=user: self.iam.delete_user_policy(UserName=u, PolicyName=u))
@@ -363,7 +380,7 @@ class Estate:
 def main(argv=None) -> None:
     ap = argparse.ArgumentParser(description="rootgraph demo AWS estate")
     ap.add_argument("cmd", choices=["up", "status", "down"])
-    ap.add_argument("--email", help="budget alert email (creates a $10/month budget at 80%)")
+    ap.add_argument("--email", action="append", help="budget alert email; repeat for several (creates a $10/month budget at 80%%)")
     ap.add_argument("--control-plane-cidr", default="172.232.86.149/32",
                     help="the rootgraph server's IP/32, allowed to query Prometheus on host-1")
     a = ap.parse_args(argv)

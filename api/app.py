@@ -10,6 +10,7 @@
   GET  /api/scenarios                 replayable scenarios
   POST /api/scenarios/{name}/inject   sandbox: inject faults + firing alerts, investigate
   POST /api/sandbox/reset             sandbox: reload the fixture estate (wipes incidents)
+  POST /api/live/break                live: revoke rule A with the revoke-only chaos IAM user (operator token)
   POST /api/actions/{id}/approve      the human approval gate (body: {"actor": "..."})
   POST /api/actions/{id}/reject
 
@@ -255,6 +256,39 @@ def inject(name: str, background: BackgroundTasks, authorization: str | None = H
             raise
     background.add_task(_investigate_scenario_bg, res["incident_id"], name, t)
     return {"incident_id": res["incident_id"], "opened": res["opened"], "investigating": True}
+
+
+_break_state = {"last": 0.0}
+
+
+@app.post("/api/live/break")
+def live_break(authorization: str | None = Header(default=None)):
+    """Live only: play the human who makes the bad change. Revokes rule A (host-1 → orders-db:5432) with the
+    revoke-only 'rootgraph-chaos' IAM user. rootgraph then has to find it; a person approves the fix."""
+    _require_operator(authorization)
+    if SANDBOX_MODE:
+        raise HTTPException(status_code=409, detail="the break button is only for the live estate")
+    if any(r["status"] == "open" for r in list_incidents(20)):
+        raise HTTPException(status_code=409, detail="an incident is still open; approve or wait for it first")
+    if time.time() - _break_state["last"] < 300:
+        raise HTTPException(status_code=429, detail="one real fault every 5 minutes")
+    import boto3
+    from ingest.worker import REGION
+    sg_db, sg_h1 = os.environ.get("SG_DB"), os.environ.get("SG_HOST1")
+    key, secret = os.environ.get("CHAOS_AWS_ACCESS_KEY_ID"), os.environ.get("CHAOS_AWS_SECRET_ACCESS_KEY")
+    if not (sg_db and sg_h1 and key and secret):
+        raise HTTPException(status_code=501, detail="chaos credentials not configured")
+    ec2 = boto3.Session(aws_access_key_id=key, aws_secret_access_key=secret, region_name=REGION).client("ec2")
+    rules = ec2.describe_security_group_rules(Filters=[{"Name": "group-id", "Values": [sg_db]}])["SecurityGroupRules"]
+    rule_a = next((r for r in rules if not r["IsEgress"] and r.get("FromPort") == 5432
+                   and (r.get("ReferencedGroupInfo") or {}).get("GroupId") == sg_h1), None)
+    if rule_a is None:
+        raise HTTPException(status_code=409, detail="rule A is already removed")
+    ec2.revoke_security_group_ingress(GroupId=sg_db, SecurityGroupRuleIds=[rule_a["SecurityGroupRuleId"]])
+    _break_state["last"] = time.time()
+    log.info("live break: revoked %s on %s", rule_a["SecurityGroupRuleId"], sg_db)
+    return {"revoked": rule_a["SecurityGroupRuleId"], "group": sg_db, "at": now(),
+            "next": "real alerts arrive in ~30-40 s; the incident appears in the list"}
 
 
 @app.post("/api/sandbox/reset")

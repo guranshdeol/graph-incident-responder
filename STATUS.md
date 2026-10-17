@@ -1,32 +1,23 @@
-# Status (updated Sat 17 Oct 2026, ~02:00 IST)
+# Status (updated Sat 17 Oct 2026, ~13:00 IST)
 
 ## Done and running
 
-- Control plane on the Linode: Docker, ufw (22/80/443) + Linode Cloud Firewall, Caddy TLS on `172-232-86-149.sslip.io`, FalkorDB (password, localhost only), nightly backup (03:00 IST, `/opt/rootgraph/backups`, keep 14).
-- Investigation pipeline, scoring, action catalogue + approval gate, memory, validator; S1–S5 fixture oracles pass. Baseline: coverage-only 2/5, scorecard 5/5 (`docs/evaluation.md`).
-- Public sandbox UI (Notion-style design, `docs/DESIGN.md`): inject S1–S5, approve, memory recall. Inject runs in the background; rate limited (15 s).
-- LLM step via OpenRouter: `LLM_MODEL=nvidia/nemotron-3-ultra-550b-a55b:free,nvidia/nemotron-3-super-120b-a12b:free`. Ultra's provider was down on 17 Oct, so Super answers; ~25 s per investigation, 2 agent-chosen calls on S1.
-- Live-AWS code, all tested against moto (not yet against a real account): `demo/aws/estate.py up|status|down`, discovery + graph diff, CloudTrail → SQS ingester, AWS executor, SSM host deploy, S1/S2/S3 fault scripts, `api-live` at `/live/`.
-- Demo stack verified for real on this server (local): stopping payments produced real alerts → incident → payments top with a live unhealthy probe.
-- MCP server (`agent/mcp_server.py`, 10 read-only tools, stdio verified). README, `docs/graph.md` (all queries), `docs/evaluation.md`.
-- 75 tests pass.
+- **Control plane (Linode, Mumbai):** Caddy TLS `172-232-86-149.sslip.io`, FalkorDB (password, localhost only), nightly backup (03:00 IST).
+  - `/` public sandbox (`api`, `ops_sandbox`).
+  - `/live/` live AWS (`api-live`, `ops_live`, operator token), plus `discovery` + `ingester` workers (compose profile `aws`).
+- **Live AWS estate (Sydney, ap-southeast-2; the team's AWS Organization allows only this region):** VPC, 3 SGs (rules A/B), host-1 + host-2 (EC2, demo stack via SSM), orders-db (RDS), CloudTrail → EventBridge → SQS, IAM users discovery / ingester / executor / chaos (revoke-only, for the site's Break-it button). Budget: $10/month, alert at 80 % to shahbhavyasp@gmail.com and guranshdeol01@gmail.com. Cost ≈ $0.10/h from the $100 Free-plan credit.
+- **Real S1 runs** (README "Live on real AWS"): root cause correct (7.75 with memory), executor fix verified, 162 s from incident open to resolved. Five live-only bugs found and fixed (DECISIONS.md).
+- Pipeline, scoring, memory, LLM agent (OpenRouter Nemotron, Ultra → Super fallback), validator, MCP server, evaluation (coverage-only 2/5 vs scorecard 5/5). 77 tests pass.
+- Docs: README, docs/graph.md (all queries), docs/evaluation.md, docs/CHECKING.md (how to check on the site), docs/blog.md (draft).
 
-## Next: live AWS (needs the teammate with the AWS account)
+## How to check it
 
-Follow `demo/aws/setup.md`. In short:
-1. `aws configure --profile rootgraph-admin` on the server (their admin keys; stays in `~/.aws`).
-2. `AWS_PROFILE=rootgraph-admin uv run python -m demo.aws.estate up --email <email>` (~15 min).
-3. `cat demo/aws/credentials.env >> .env`.
-4. Wait ~3 min, then `AWS_PROFILE=rootgraph-admin uv run python -m demo.aws.deploy_hosts`.
-5. Set `PROMETHEUS_URL_LIVE=http://<host-1 public IP>:9090` in `.env`; `docker compose --profile aws up -d --build api-live discovery ingester`.
-6. Check `ops_live` in FalkorDB Browser; run S1 for real (`python -m demo.faults.s1_revoke_sg`), approve in `/live/` with `ADMIN_TOKEN`; record the real CloudTrail SQS message into `ingest/fixtures/`.
-7. Record the demo video from a real run (plan §14 outline).
-
-Things that may differ from moto on a real account: CloudTrail→EventBridge latency (the graph diff covers it), exact event payload shapes, Docker install time on the hosts, SSM agent registration delay.
+docs/CHECKING.md. Sandbox: click S1 → approve → S4. Live: `/live/` + operator token → "Break it for real" → approve.
 
 ## Still open
 
-- SSH hardening: teammates' public keys into `/root/.ssh/authorized_keys`, then `PasswordAuthentication no`.
-- Blog post draft: `docs/blog.md` (facts checked; review the wording before publishing; side prize).
-- Submission: demo video, submission form (name both tracks), AI-assistance disclosure is in the README.
-- After submitting: `python -m demo.aws.estate down`, delete the admin key, rotate `WEBHOOK_TOKEN`/`ADMIN_TOKEN`/OpenRouter key; keep the Linode sandbox up for judging.
+- **Demo video (last, by team decision):** project in `/opt/rootgraph/video/rootgraph-demo` (skill `deol-youtube-explainer-video`, `. /opt/rootgraph/video/env.sh` first). 16 scenes built incl. S14 from real AWS screenshots; lint clean at ~6:45. Left: S14 voice (needs the host's Voicebox tunnel: `ssh -N -R 17493:127.0.0.1:17493 root@172.232.86.149` on the laptop), cut-d render, Opus critic round, 60 fps master (~45 min CPU), thumbnail/chapters/copy.
+- SSH hardening (teammates' public keys, then `PasswordAuthentication no`); bots are guessing the root password.
+- Replace the hand-written CloudTrail sample in `ingest/fixtures/` with a recorded event (the real ones parse correctly; the ingester doesn't keep raw bodies).
+- Submission form: both tracks, video link, repo, sandbox URL.
+- After judging: `AWS_PROFILE=rootgraph-admin uv run python -m demo.aws.estate down`, delete the admin access key, rotate WEBHOOK_TOKEN / ADMIN_TOKEN / OpenRouter key.

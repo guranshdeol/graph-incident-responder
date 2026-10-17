@@ -267,7 +267,17 @@ async function loadScenarios() {
   $("mode").textContent = data.sandbox ? "Sandbox" : "Live";
   $("mode").title = data.sandbox ? "graph: ops_sandbox (synthetic)" : "graph: ops_live";
   $("sandboxNote").hidden = !data.sandbox;
-  if (!data.sandbox) return;
+  if (!data.sandbox) {
+    $("scenarios").replaceChildren(el("button", { class: "ghost", onclick: async (e) => {
+      if (!confirm("Revoke rule A on the real AWS estate? Real alerts will fire; rootgraph investigates and you approve the fix.")) return;
+      const b = e.currentTarget; b.disabled = true;
+      try { const r = await api("api/live/break", { method: "POST" }); alert(`Revoked ${r.revoked}. ${r.next}.`); }
+      catch (err) { alert(err.message); } finally { b.disabled = false; }
+    } }, el("span", { class: "k" }, "LIVE"), "Break it for real: revoke rule A"));
+    $("sandboxNote").hidden = false;
+    $("sandboxNote").replaceChildren("Real AWS (Sydney). Needs the operator token in the top bar. A revoke-only IAM user makes the bad change; the agent's executor can only put rules back.");
+    return;
+  }
   $("scenarios").replaceChildren(...data.scenarios.map((s, i) =>
     el("button", { class: "ghost", title: s.title, onclick: async (e) => {
       const b = e.currentTarget; b.disabled = true;
