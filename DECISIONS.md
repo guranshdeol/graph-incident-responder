@@ -113,3 +113,8 @@ One line per non-obvious choice (plan §15.4). Newest at the bottom.
 - **Hosts:** services now `restart: unless-stopped` (a `docker stop` still stays down; a started instance brings them back), and a `HostDown` alert (`up{job="node"} == 0` for 15 s).
 - **Bugs the live run found:** (1) `ModifySecurityGroupRules` also needs permission on the rule's *source* group (sg-host1), not only the group being edited. (2) A failed execution left the incident stuck: failed actions blocked re-investigation and nothing re-ran it. Now failed/rejected actions don't block, and a failed execution starts a fresh investigation in a thread (an error response drops FastAPI background tasks). Regression test: `test_failed_execution_triggers_a_fresh_look`.
 - `demo/faults/restore_all.py` now undoes all five faults.
+
+## Third LLM fallback (Sat 17 Oct 2026, ~14:00 IST)
+
+- `LLM_MODEL` gains `nvidia/nemotron-3.5-super-vl:free` (tool calling supported, 1M context) after Ultra and Super: Ultra → Super → 3.5 Super VL.
+- **Fallbacks don't help with the daily cap:** OpenRouter's free tier allows 50 free-model requests per day per account, across all free models (`free-models-per-day`, 429). Once it's spent, every model in the list is refused and the report falls back to the template explanation (the deterministic diagnosis and fix are unaffected). The cap resets at 00:00 UTC (05:30 IST). Adding $10 of credits raises it to 1000/day.
