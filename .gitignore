@@ -6,3 +6,10 @@ __pycache__/
 demo/aws/state.json
 demo/aws/credentials.env
 demo/build/
+
+# editor swap / lock files (nano and vim write .<file>.swp next to .env)
+*.swp
+*.swo
+*.swn
+*.swm
+.*.sw?
