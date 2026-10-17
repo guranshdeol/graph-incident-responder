@@ -252,3 +252,13 @@ def test_repeated_notifications_never_open_a_second_incident(g):
     g.query("MATCH (i:Incident {id: $id}) SET i.status = 'failed'", {"id": first["incident_id"]})
     late = alert_ingest.ingest(g, sc.payload("firing"), now=NOW + 400)        # incident failed, same alerts still firing
     assert late["incident_id"] == first["incident_id"] and not late["opened"]
+
+
+def test_late_reinvestigation_reuses_the_approved_action(g):
+    sc, rep = investigate(g, "s1")
+    act = rep["proposals"][0]["action"]
+    actions.approve(g, act["id"], "oncall@team", NOW + 5)
+    rep2 = Investigator(g, sc.probes, now=lambda: NOW + 10).run(rep["incident_id"])   # finished after the approval
+    assert rep2["proposals"][0]["action"]["id"] == act["id"] and rep2["proposals"][0]["action"]["status"] == "approved"
+    n = g.query("MATCH (x:Action)-[:FOR]->(:Incident {id: $id}) RETURN count(x)", {"id": rep["incident_id"]}).result_set[0][0]
+    assert n == 1

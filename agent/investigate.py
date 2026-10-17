@@ -83,7 +83,9 @@ class Investigator:
                     continue
                 row = cp["rows"][0]
                 rm = self._call(self.tools.removed_rules(*pair, minutes=WINDOW_MINUTES, now=now))
-                culprits = {r["firewall"]: r for r in rm["rows"]} if rm["outcome"] == ANSWERED else {}
+                culprits = {}
+                for r in (rm["rows"] if rm["outcome"] == ANSWERED else []):   # Q10 is newest first: keep each firewall's latest removal
+                    culprits.setdefault(r["firewall"], r)
                 fws = list(culprits) or [f["firewall"] for f in row["per_firewall"]]
                 src_row = by_rid.get(src, {"explains": [src] if src in alerting else [], "min_hops": 0})
                 # the source's host also suffers if an alert there targets the dependency (blackbox)
@@ -129,6 +131,7 @@ class Investigator:
 
         # 6 score
         rows = scoring.scorecard(list(cands.values()), len(alerting))
+        db.run(self.g, "w7a_clear_suspects", {"id": incident_id})
         db.run(self.g, "w7_write_suspects",
                {"id": incident_id, "rows": [{"rid": r["rid"], "score": r["score"], "rank": r["rank"]} for r in rows]})
         multiple = scoring.multiple_causes(rows)

@@ -109,7 +109,7 @@ def propose(g, tools, probe_source, incident_id: str, kind: str, target_rid: str
 
     _, existing = db.run(g, "q21_open_action_for", {"incident_id": incident_id, "kind": kind, "target_rid": target_rid})
     if existing:  # a re-investigation of the same incident: keep the one proposal
-        return {"id": existing[0]["id"], "kind": kind, "target_rid": target_rid, "status": "proposed", "params": params}
+        return {"id": existing[0]["id"], "kind": kind, "target_rid": target_rid, "status": existing[0]["status"], "params": params}
     action_id = f"ACT-{uuid.uuid4().hex[:8]}"
     db.run(g, "w8_create_action", {"id": action_id, "kind": kind, "params": json.dumps(params),
                                    "now": now, "incident_id": incident_id, "target_rid": target_rid})

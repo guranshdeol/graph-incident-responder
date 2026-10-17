@@ -457,7 +457,12 @@ $("token").addEventListener("change", (e) => store.set("rootgraph.token", e.targ
 
 loadScenarios().catch(e => $("placeholder").append(el("p", { class: "err" }, e.message)));
 refreshList();
-setInterval(() => { refreshList().catch(() => {}); }, 5000);
+setInterval(() => {
+  refreshList().catch(() => {});
+  // keep the open incident live (verification can resolve it minutes after Approve)
+  const st = document.querySelector('#incStatus .pill');
+  if (current && st && !['resolved', 'failed'].includes(st.textContent)) openIncident(current).catch(() => {});
+}, 5000);
 </script>
 </body>
 </html>
