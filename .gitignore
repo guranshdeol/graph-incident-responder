@@ -13,3 +13,5 @@ demo/build/
 *.swn
 *.swm
 .*.sw?
+
+demo/accounts.txt

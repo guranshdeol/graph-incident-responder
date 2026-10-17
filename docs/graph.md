@@ -511,6 +511,85 @@ RETURN fw.rid AS firewall, p.removed_at AS removed_at
 ORDER BY removed_at DESC
 ```
 
+### q28_list_actions
+
+list_actions: every proposed fix with its incident, target and approval trail, newest first: the console's audit log.
+
+Params: $limit
+
+```cypher
+MATCH (x:Action)-[:FOR]->(i:Incident)
+OPTIONAL MATCH (x)-[:TARGETS]->(t:Resource)
+RETURN x.id AS id, x.kind AS kind, x.status AS status, x.proposed_at AS proposed_at, x.updated_at AS updated_at,
+       x.executed_at AS executed_at, x.approved_by AS approved_by, x.detail AS detail,
+       i.id AS incident, t.rid AS target, t.name AS target_name
+ORDER BY proposed_at DESC
+LIMIT $limit
+```
+
+### q29_memory
+
+memory: resolved incidents as the agent remembers them: root cause, the change that explained it, the verified fix and who approved it (what Q7 recalls from).
+
+Params: $limit
+
+```cypher
+MATCH (i:Incident {status: 'resolved'})-[:ROOT_CAUSE]->(rc:Resource)
+OPTIONAL MATCH (i)-[:HAS_ALERT]->(al:Alert)
+OPTIONAL MATCH (i)-[:EXPLAINED_BY]->(ch:Change)
+OPTIONAL MATCH (act:Action {status: 'verified'})-[:RESOLVED]->(i)
+RETURN i.id AS id, i.opened_at AS opened_at, i.ttr_seconds AS ttr_seconds, rc.rid AS root_cause,
+       rc.name AS root_name, labels(rc) AS root_kinds, collect(DISTINCT al.alertname) AS alertnames,
+       ch.event_name AS change, ch.actor AS actor, act.kind AS fix, act.approved_by AS approved_by
+ORDER BY opened_at DESC
+LIMIT $limit
+```
+
+### q30_incident_reports
+
+incident_reports: every stored investigation report (the console counts how often memory was reused).
+
+Params: $limit
+
+```cypher
+MATCH (i:Incident)
+WHERE i.report IS NOT NULL
+RETURN i.id AS id, i.report AS report
+ORDER BY i.opened_at DESC
+LIMIT $limit
+```
+
+### q31_estate_status
+
+estate_status: what the graph holds and how fresh it is: resources and edges, last discovery sync, last CloudTrail event, last alert (the console's Integrations page).
+
+Params: none
+
+```cypher
+MATCH (r:Resource)
+WITH count(r) AS resources, max(r.last_seen) AS last_sync
+OPTIONAL MATCH (:Resource)-[e]->(:Resource)
+WITH resources, last_sync, count(e) AS edges
+OPTIONAL MATCH (c:Change)
+WITH resources, last_sync, edges, max(CASE WHEN c.source = 'cloudtrail' THEN c.at END) AS last_trail,
+     sum(CASE WHEN c.source = 'cloudtrail' THEN 1 ELSE 0 END) AS trail_events, count(c) AS changes
+OPTIONAL MATCH (a:Alert)
+RETURN resources, edges, last_sync, last_trail, trail_events, changes, max(a.starts_at) AS last_alert, count(a) AS alerts
+```
+
+### q32_resource_incidents
+
+resource_incidents: incidents that suspected this resource, with its rank in each.
+
+Params: $rid, $limit
+
+```cypher
+MATCH (i:Incident)-[s:SUSPECTS]->(:Resource {rid: $rid})
+RETURN i.id AS id, i.status AS status, i.opened_at AS opened_at, s.rank AS rank, s.score AS score
+ORDER BY opened_at DESC
+LIMIT $limit
+```
+
 ## Write queries (ingestion, investigation, memory)
 
 ### w1_upsert_rule

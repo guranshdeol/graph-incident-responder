@@ -4,148 +4,147 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
-<title>rootgraph</title>
-<meta name="description" content="rootgraph: many alerts, one cause. A FalkorDB graph of your infrastructure finds the change behind an incident and proposes the exact undo, which a person approves.">
+<title>rootgraph console</title>
+<meta name="description" content="rootgraph: incident root cause on a FalkorDB graph of your infrastructure.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.30.2/cytoscape.min.js"></script>
 <style>
-/* Design tokens from docs/DESIGN.md ("frosted glass cathedral at midnight").
-   Untitled Sans -> Inter, aeonikPro -> Space Grotesk, dotDigital -> JetBrains Mono (the substitutes it names).
-   Violet is the single primary action. Ember marks what is broken, teal what is healthy: the two
-   secondary accents the system allows, used only for status. */
+/* Design tokens from docs/DESIGN.md ("frosted glass cathedral at midnight"), at console density.
+   Untitled Sans -> Inter, aeonikPro -> Space Grotesk, dotDigital -> JetBrains Mono.
+   Violet is the single primary action; ember / teal / amber carry status only. */
 :root {
-  --canvas: #05060f; --steel: #2f343e;
-  --ice: #d8ecf8; --frost: #d1e4fa; --mist: #c7d3ea; --fog: #9da7ba;
+  --canvas: #05060f; --panel: #080a16; --steel: #2f343e;
+  --ice: #d8ecf8; --frost: #d1e4fa; --mist: #c7d3ea; --fog: #9da7ba; --dim: #6b7487;
   --skywash: linear-gradient(180deg, #d8ecf8 0%, #98c0ef 100%);
   --violet: #663af3; --violet-hi: #7a52f5; --blueprint: #b6d9fc;
   --ember: #e46d4c; --teal: #269684; --amber: #e2b55b;
   --edge: rgba(186,215,247,.12); --edge-hi: rgba(186,215,247,.24); --wash: rgba(186,214,247,.06); --wash-hi: rgba(186,214,247,.12);
   --glass: rgba(186,214,247,.03); --tint: rgba(199,211,234,.12);
-  --card-shadow: inset 0 1px 1px rgba(199,211,234,.12), inset 0 24px 48px rgba(199,211,234,.05), 0 24px 32px rgba(6,6,14,.7);
+  --card-shadow: inset 0 1px 1px rgba(199,211,234,.1), inset 0 24px 48px rgba(199,211,234,.03), 0 16px 32px rgba(6,6,14,.6);
   --modal-shadow: inset 0 1px 1px rgba(216,236,248,.2), inset 0 24px 48px rgba(168,216,245,.06), 0 16px 32px rgba(0,0,0,.3);
   --sans: "Inter", "Untitled Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --display: "Space Grotesk", "aeonikPro", ui-sans-serif, system-ui, sans-serif;
   --mono: "JetBrains Mono", "dotDigital", ui-monospace, SFMono-Regular, Menlo, monospace;
-  --r-card: 16px; --r-badge: 6px; --r-pill: 999px;
+  --r-card: 16px; --r-badge: 6px; --r-pill: 999px; --side: 248px;
 }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
-html { scroll-behavior: smooth; overflow-x: clip; }
-section, header, #app, #incident { scroll-margin-top: 80px; }
+html { overflow-x: clip; }
 html, body { background: var(--canvas); }
-body { margin: 0; color: var(--frost); font: 400 16px/1.5 var(--sans); letter-spacing: -0.01em; -webkit-font-smoothing: antialiased; overflow-x: hidden; }
-@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } *, *::before { animation: none !important; transition: none !important; } }
-
-/* ambient: blueprint grid + spotlight */
-.atmos { position: fixed; inset: 0; z-index: -1; pointer-events: none;
-  background-image: linear-gradient(rgba(186,215,247,.05) 1px, transparent 1px), linear-gradient(90deg, rgba(186,215,247,.05) 1px, transparent 1px);
-  background-size: 88px 88px; -webkit-mask-image: radial-gradient(ellipse 80% 70% at 50% 20%, #000 30%, transparent 85%); mask-image: radial-gradient(ellipse 80% 70% at 50% 20%, #000 30%, transparent 85%); }
-.spot { position: absolute; left: 0; right: 0; top: 0; height: 760px; z-index: -1; pointer-events: none; overflow: hidden;
-  background: conic-gradient(from 180deg at 50% -8%, transparent 44%, rgba(124,145,182,.22) 48.5%, rgba(124,145,182,.42) 50%, rgba(124,145,182,.22) 51.5%, transparent 56%);
-  -webkit-mask-image: linear-gradient(#000 20%, transparent 95%); mask-image: linear-gradient(#000 20%, transparent 95%); }
-.spot::after { content: ""; position: absolute; left: 50%; top: 120px; width: min(720px, 100%); height: 380px; transform: translateX(-50%);
-  background: radial-gradient(closest-side, rgba(102,58,243,.16), transparent); filter: blur(10px); }
-
-.wrap { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
-@media (max-width: 640px) { .wrap { padding: 0 16px; } }
-button, input { font-family: inherit; }
-a { color: var(--frost); }
-
-/* nav */
-nav { position: sticky; top: 0; z-index: 20; background: rgba(5,6,15,.72); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); box-shadow: 0 1px 0 var(--edge); }
-nav .wrap { height: 64px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.logo { font: 500 18px var(--display); color: var(--frost); display: flex; align-items: center; gap: 10px; text-decoration: none; letter-spacing: 0; }
-.logo svg { width: 22px; height: 22px; }
-nav .right { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.navlinks { display: flex; gap: 2px; }
-.navlink { color: var(--fog); text-decoration: none; font-size: 14px; font-weight: 500; padding: 8px 12px; border-radius: var(--r-pill); white-space: nowrap; }
-.navlink:hover { color: var(--frost); background: var(--wash); }
-@media (max-width: 760px) { .navlinks { display: none; } }
-
-/* buttons: every interactive element is a pill */
-button, .btn { font-size: 14px; font-weight: 500; border-radius: var(--r-pill); padding: 8px 16px; cursor: pointer; border: 0; line-height: 1.43;
-  background: var(--wash); color: #fff; box-shadow: inset 0 0 0 1px var(--edge); text-decoration: none; display: inline-flex; align-items: center; gap: 8px;
-  transition: background-color .2s ease, box-shadow .2s ease, transform .2s ease; }
-button:hover, .btn:hover { background: var(--wash-hi); }
-button.primary, .btn.primary { background: var(--violet); box-shadow: 0 0 0 1px rgba(255,255,255,.08) inset, 0 8px 24px rgba(102,58,243,.35); padding: 10px 20px; }
-button.primary:hover, .btn.primary:hover { background: var(--violet-hi); transform: translateY(-1px); }
-button.outline, .btn.outline { background: transparent; color: var(--frost); }
-button.small { padding: 4px 12px; font-size: 13px; }
-button:disabled { opacity: .45; cursor: default; transform: none; }
+body { margin: 0; color: var(--frost); font: 400 14px/1.5 var(--sans); letter-spacing: -0.01em; -webkit-font-smoothing: antialiased; }
+@media (prefers-reduced-motion: reduce) { *, *::before { animation: none !important; transition: none !important; } }
+button, input, select { font-family: inherit; }
+a { color: var(--blueprint); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, pre { font-family: var(--mono); font-size: 12px; }
 :focus-visible { outline: 2px solid var(--blueprint); outline-offset: 2px; }
+.atmos { position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background-image: linear-gradient(rgba(186,215,247,.035) 1px, transparent 1px), linear-gradient(90deg, rgba(186,215,247,.035) 1px, transparent 1px);
+  background-size: 88px 88px; -webkit-mask-image: radial-gradient(ellipse 90% 80% at 60% 0%, #000 20%, transparent 80%); mask-image: radial-gradient(ellipse 90% 80% at 60% 0%, #000 20%, transparent 80%); }
 
-/* type */
-.eyebrow { font: 400 13px/1.2 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--mist); margin: 0 0 14px; font-feature-settings: "tnum"; }
-.eyebrow.center { display: flex; align-items: center; justify-content: center; gap: 16px; }
-.eyebrow.center::before, .eyebrow.center::after { content: ""; height: 1px; width: 72px; background: linear-gradient(90deg, transparent, var(--edge-hi)); }
-.eyebrow.center::after { transform: scaleX(-1); }
-.sky { background: var(--skywash); -webkit-background-clip: text; background-clip: text; color: transparent; }
-h2.section { font: 500 clamp(32px, 4.4vw, 44px)/1.16 var(--display); margin: 0 auto 12px; text-align: center; max-width: 820px; }
-.lede { font-size: 18px; line-height: 1.5; color: var(--mist); max-width: 640px; margin: 0 auto; text-align: center; }
-.meta { font-size: 14px; color: var(--fog); }
-.fine { font-size: 13px; color: var(--fog); margin: 14px 0 0; }
-code, pre { font-family: var(--mono); font-size: 12.5px; }
+/* buttons: pills */
+button, .btn { font-size: 13px; font-weight: 500; border-radius: var(--r-pill); padding: 7px 14px; cursor: pointer; border: 0; line-height: 1.4;
+  background: var(--wash); color: #fff; box-shadow: inset 0 0 0 1px var(--edge); display: inline-flex; align-items: center; gap: 7px; white-space: nowrap;
+  transition: background-color .15s ease, box-shadow .15s ease; text-decoration: none; }
+button:hover, .btn:hover { background: var(--wash-hi); text-decoration: none; }
+button.primary { background: var(--violet); box-shadow: inset 0 0 0 1px rgba(255,255,255,.1), 0 6px 18px rgba(102,58,243,.3); }
+button.primary:hover { background: var(--violet-hi); }
+button.ghost { background: transparent; box-shadow: none; color: var(--fog); }
+button.ghost:hover { color: var(--frost); background: var(--wash); }
+button.danger { color: #f29a80; }
+button:disabled { opacity: .45; cursor: default; }
+svg.i { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; flex: none; }
 
-/* hero */
-.hero { text-align: center; padding: 88px 0 56px; position: relative; }
-.hero h1 { font: 500 clamp(44px, 7.4vw, 92px)/1.06 var(--display); margin: 0 auto; max-width: 1000px; letter-spacing: -0.02em; }
-.hero h1 .glow { text-shadow: 0 0 6px rgba(186,207,247,.25), 0 0 28px rgba(238,186,247,.12); }
-.hero .sub { font-size: 19px; line-height: 1.55; color: var(--mist); max-width: 680px; margin: 24px auto 32px; }
-.ctas { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
-.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; max-width: 920px; margin: 48px auto 0; }
-.stat { padding: 16px 12px; border-radius: var(--r-card); background: var(--glass); box-shadow: var(--card-shadow); }
-.stat b { display: block; font: 500 28px/1.1 var(--display); color: var(--ice); }
-.stat span { font-size: 13px; color: var(--fog); }
-@media (max-width: 760px) { .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+/* sign-in */
+.signin { min-height: 100vh; display: grid; place-items: center; padding: 24px; position: relative; overflow: hidden; }
+.signin::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 640px; pointer-events: none;
+  background: conic-gradient(from 180deg at 50% -8%, transparent 44%, rgba(124,145,182,.2) 48.5%, rgba(124,145,182,.4) 50%, rgba(124,145,182,.2) 51.5%, transparent 56%);
+  -webkit-mask-image: linear-gradient(#000 20%, transparent 95%); mask-image: linear-gradient(#000 20%, transparent 95%); }
+.authcard { width: 100%; max-width: 380px; border-radius: var(--r-card); padding: 32px; background: rgba(5,6,15,.97); box-shadow: var(--modal-shadow), 0 0 0 1px var(--edge); position: relative; }
+.authcard .mark { display: flex; justify-content: center; margin-bottom: 18px; }
+.authcard .mark svg { width: 40px; height: 40px; }
+.authcard h1 { font: 500 30px/1.15 var(--display); text-align: center; margin: 0 0 6px; }
+.authcard p.sub { text-align: center; color: var(--fog); margin: 0 0 24px; font-size: 14px; }
+.field { display: grid; gap: 6px; margin-bottom: 14px; }
+.field label { font-size: 12.5px; color: var(--mist); font-weight: 500; }
+input[type=text], input[type=password], input[type=search], select { font-size: 14px; padding: 9px 11px; border-radius: var(--r-badge); border: 0; box-shadow: inset 0 0 0 1px var(--edge); background: rgba(199,211,234,.06); color: #fff; width: 100%; }
+select option { background: #0b0d1a; }
+input::placeholder { color: rgba(199,211,234,.5); }
+input:focus, select:focus { outline: none; box-shadow: inset 0 0 0 1px var(--edge-hi), 0 0 0 3px rgba(102,58,243,.25); }
+.authcard button.primary { width: 100%; justify-content: center; padding: 11px; border-radius: var(--r-badge); font-size: 14px; margin-top: 6px; }
+.authcard .err { color: #f29a80; font-size: 13px; min-height: 20px; margin: 10px 0 0; text-align: center; }
+.authcard .foot { font-size: 12px; color: var(--dim); text-align: center; margin-top: 20px; }
 
-/* sections */
-section.block { padding: 96px 0 0; }
-@media (max-width: 640px) { section.block { padding-top: 72px; } }
+/* shell */
+.shell { display: grid; grid-template-columns: var(--side) minmax(0, 1fr); min-height: 100vh; }
+.side { position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; gap: 6px; padding: 18px 14px; background: rgba(8,10,22,.85); box-shadow: 1px 0 0 var(--edge); backdrop-filter: blur(12px); z-index: 30; }
+.brand { display: flex; align-items: center; gap: 10px; font: 500 17px var(--display); color: var(--frost); padding: 4px 8px 14px; }
+.brand svg { width: 22px; height: 22px; }
+.envsel { position: relative; margin: 0 0 14px; }
+.envbtn { width: 100%; justify-content: space-between; border-radius: 10px; padding: 9px 11px; text-align: left; background: var(--wash); }
+.dot { width: 8px; height: 8px; border-radius: 50%; flex: none; display: inline-block; }
+.envbtn .lbl { display: grid; line-height: 1.25; flex: 1; }
+.envbtn .lbl b { font-weight: 600; font-size: 13px; }
+.envbtn .lbl small { color: var(--fog); font-size: 11.5px; font-weight: 400; }
+.dot.prod { background: var(--teal); box-shadow: 0 0 8px rgba(38,150,132,.8); }
+.dot.stage { background: var(--amber); box-shadow: 0 0 8px rgba(226,181,91,.6); }
+.menu { position: absolute; left: 0; right: 0; top: calc(100% + 6px); background: #0b0d1a; border-radius: 12px; box-shadow: var(--modal-shadow), 0 0 0 1px var(--edge); padding: 6px; z-index: 50; display: grid; gap: 2px; }
+.menu button { width: 100%; justify-content: flex-start; align-items: flex-start; background: transparent; box-shadow: none; border-radius: 8px; padding: 8px 10px; text-align: left; white-space: normal; }
+.menu button .dot { margin-top: 6px; }
+.menu button:hover { background: var(--wash-hi); }
+.menu .hint { font-size: 12px; color: var(--fog); padding: 6px 10px 4px; }
+.nav { display: grid; gap: 2px; }
+.nav a { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px; color: var(--fog); font-weight: 500; font-size: 13.5px; }
+.nav a:hover { background: var(--wash); color: var(--frost); text-decoration: none; }
+.nav a.on { background: var(--wash-hi); color: #fff; box-shadow: inset 2px 0 0 var(--violet); }
+.nav .count { margin-left: auto; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 9px; background: rgba(226,181,91,.18); color: #f1cf86; }
+.me { margin-top: auto; display: flex; align-items: center; gap: 10px; padding: 10px 8px 2px; box-shadow: 0 -1px 0 var(--edge); }
+.avatar { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: rgba(102,58,243,.3); color: #e0d6ff; font-weight: 600; font-size: 13px; text-transform: uppercase; flex: none; }
+.me .who { display: grid; line-height: 1.25; min-width: 0; flex: 1; }
+.me .who b { font-weight: 600; font-size: 13px; overflow: hidden; text-overflow: ellipsis; }
+.me .who small { color: var(--fog); font-size: 11.5px; }
 
-/* glass cards */
-.card { background: var(--glass); border-radius: var(--r-card); padding: 24px; min-width: 0; box-shadow: var(--card-shadow); }
-.card.lift { transition: transform .25s ease, box-shadow .25s ease, background-color .25s ease; }
-.card.lift:hover { transform: translateY(-2px); background: rgba(186,214,247,.05); }
-.stack > * + * { margin-top: 16px; }
-h2.title { font: 500 24px/1.17 var(--display); color: var(--ice); margin: 0 0 6px; }
-.intro { color: var(--fog); margin: 0 0 18px; font-size: 15px; }
+.main { min-width: 0; }
+.top { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 12px; padding: 14px 28px; background: rgba(5,6,15,.78); backdrop-filter: blur(12px); box-shadow: 0 1px 0 var(--edge); min-height: 62px; }
+.top h1 { font: 500 20px/1.2 var(--display); margin: 0; color: var(--ice); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.crumb { color: var(--fog); font-size: 12.5px; white-space: nowrap; }
+.crumb a { color: var(--fog); }
+.top .actions { margin-left: auto; display: flex; gap: 8px; align-items: center; position: relative; }
+.menubtn { display: none; }
+.content { padding: 24px 28px 64px; max-width: 1320px; }
+@media (max-width: 900px) {
+  .shell { grid-template-columns: minmax(0, 1fr); }
+  .side { position: fixed; left: 0; top: 0; width: 272px; transform: translateX(-100%); transition: transform .2s ease; }
+  .side.open { transform: none; box-shadow: 0 0 0 100vmax rgba(0,0,0,.55); }
+  .menubtn { display: inline-flex; }
+  .top { padding: 12px 16px; }
+  .content { padding: 18px 16px 48px; }
+}
+
+/* cards, grids */
+.card { background: var(--glass); border-radius: var(--r-card); padding: 20px; min-width: 0; box-shadow: var(--card-shadow), inset 0 0 0 1px rgba(186,215,247,.05); }
+.card h2 { font: 500 16px/1.3 var(--display); margin: 0 0 4px; color: var(--ice); display: flex; align-items: center; gap: 8px; }
+.card .sub { color: var(--fog); font-size: 13px; margin: 0 0 14px; }
+.grid { display: grid; gap: 16px; }
+.g4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.g2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.g32 { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
+@media (max-width: 1100px) { .g4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } .g32 { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 640px) { .g4, .g2 { grid-template-columns: minmax(0, 1fr); } }
+.kpi .label { font-size: 12.5px; color: var(--fog); }
+.kpi .val { font: 500 32px/1.15 var(--display); color: var(--ice); margin-top: 6px; }
+.kpi .foot { font-size: 12px; color: var(--fog); margin-top: 2px; }
+.kpi.alert .val { color: #f1cf86; }
 .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-
-/* scenario picker */
-.groups { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 40px; }
-@media (max-width: 920px) { .groups { grid-template-columns: minmax(0, 1fr); } }
-.group h3 { font: 400 12px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--fog); margin: 0 0 10px 4px; }
-.scen { display: block; width: 100%; text-align: left; border-radius: var(--r-card); padding: 16px 18px; background: var(--glass); box-shadow: var(--card-shadow); color: var(--frost); cursor: pointer; margin-bottom: 10px; position: relative; font-weight: 400; }
-.scen:hover { background: rgba(186,214,247,.06); transform: translateY(-2px); }
-.scen .tag { font: 500 12px var(--mono); color: var(--blueprint); margin-right: 8px; }
-.scen .name { font: 500 17px/1.3 var(--display); color: var(--ice); }
-.scen .what { display: block; font-size: 14px; color: var(--mist); margin-top: 6px; line-height: 1.45; }
-.scen .look { display: block; font-size: 13px; color: var(--fog); margin-top: 6px; }
-.scen .start { position: absolute; top: 14px; right: 14px; font: 500 11px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: #fff; background: var(--violet); padding: 3px 8px; border-radius: var(--r-badge); }
-.scen.first .name { padding-right: 96px; }
-.scen.first { box-shadow: var(--card-shadow), inset 0 0 0 1px rgba(102,58,243,.6); }
-.scen[aria-busy="true"] { opacity: .6; }
-.note { text-align: center; margin: 24px 0 0; font-size: 14px; color: var(--fog); display: flex; gap: 10px; justify-content: center; align-items: center; flex-wrap: wrap; }
-.handlist { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-top: 36px; }
-.handlist .card h4 { font: 500 16px var(--display); color: var(--ice); margin: 0 0 6px; }
-.handlist .card p { margin: 0; font-size: 14px; color: var(--mist); }
-.handlist .card small { display: block; margin-top: 8px; color: var(--fog); font-size: 12.5px; }
-
-/* product surface */
-.app { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 16px; padding-top: 40px; align-items: start; }
-@media (max-width: 960px) { .app { grid-template-columns: minmax(0, 1fr); } }
-aside .card + .card { margin-top: 16px; }
-.incidents { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; max-height: 460px; overflow-y: auto; }
-.incidents li { padding: 10px 12px; border-radius: 10px; cursor: pointer; display: grid; gap: 4px; background: var(--wash); box-shadow: inset 0 0 0 1px var(--edge); transition: background-color .2s ease; }
-.incidents li:hover { background: var(--wash-hi); }
-.incidents li.sel { box-shadow: inset 0 0 0 1px rgba(102,58,243,.8), 0 0 18px rgba(102,58,243,.25); }
-.incidents .id { font-family: var(--mono); font-size: 13px; color: var(--ice); }
-.incidents li.none { cursor: default; color: var(--fog); font-size: 14px; background: transparent; }
+.spacer { flex: 1; }
+.muted { color: var(--fog); }
+.small { font-size: 12.5px; }
+.mono { font-family: var(--mono); font-size: 12px; }
 
 /* badges */
-.pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 500; line-height: 1.33; padding: 3px 8px; border-radius: var(--r-badge); background: var(--tint); color: var(--frost); white-space: nowrap; }
+.pill { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 500; line-height: 1.4; padding: 2px 8px; border-radius: var(--r-badge); background: var(--tint); color: var(--frost); white-space: nowrap; }
 .pill.open { background: rgba(226,181,91,.16); color: #f1cf86; }
 .pill.open::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: #f1cf86; animation: pulse 1.6s ease-in-out infinite; }
 .pill.bad { background: rgba(228,109,76,.18); color: #f29a80; }
@@ -153,777 +152,713 @@ aside .card + .card { margin-top: 16px; }
 .pill.good { background: rgba(38,150,132,.18); color: #6fd3c1; }
 .pill.done { background: rgba(38,150,132,.22); color: #8de3d4; }
 .pill.agent { background: rgba(102,58,243,.28); color: #d9ccff; }
+.pill.person { background: rgba(228,109,76,.14); color: #f4b19c; }
+.pill.bot { background: rgba(38,150,132,.16); color: #7fd8c8; }
+.pill.sys { background: var(--tint); color: var(--mist); }
 @keyframes pulse { 50% { opacity: .3; } }
 
-/* incident header + progress */
-.inc-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-.inc-head h1 { font: 500 clamp(28px, 4vw, 40px)/1.16 var(--display); margin: 0; color: var(--ice); }
-.alerts { margin-top: 10px; color: var(--mist); font-size: 15px; }
-.alerts b { color: var(--ice); font-weight: 500; }
-.steps { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0; margin-top: 22px; position: relative; }
-.steps li { list-style: none; text-align: center; font-size: 13px; color: var(--fog); position: relative; padding-top: 30px; }
-.steps li::before { content: ""; position: absolute; top: 6px; left: 50%; transform: translateX(-50%); width: 14px; height: 14px; border-radius: 50%; background: var(--canvas); box-shadow: inset 0 0 0 1px var(--edge-hi); z-index: 1; }
-.steps li::after { content: ""; position: absolute; top: 12px; left: -50%; width: 100%; height: 2px; background: var(--edge); }
+/* tables */
+.tablewrap { overflow-x: auto; margin: 0 -4px; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { text-align: left; padding: 10px; box-shadow: inset 0 -1px 0 var(--edge); vertical-align: top; }
+th { font: 500 10.5px var(--mono); color: var(--dim); text-transform: uppercase; letter-spacing: .08em; white-space: nowrap; }
+tr.click { cursor: pointer; }
+tr.click:hover td { background: rgba(186,214,247,.035); }
+td.num { font-variant-numeric: tabular-nums; text-align: right; }
+.strong { color: var(--ice); font-weight: 500; }
+.idcell { font-family: var(--mono); font-size: 12px; color: var(--ice); white-space: nowrap; }
+.empty { padding: 28px 12px; text-align: center; color: var(--fog); }
+.empty b { display: block; color: var(--mist); font-weight: 500; font-size: 14px; margin-bottom: 4px; }
+
+/* chips / tabs */
+.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chips button { padding: 5px 12px; font-size: 12.5px; color: var(--mist); }
+.chips button[aria-pressed="true"] { background: var(--wash-hi); color: #fff; box-shadow: inset 0 0 0 1px var(--edge-hi); }
+.tabs { display: flex; gap: 4px; box-shadow: inset 0 -1px 0 var(--edge); margin: 18px 0; overflow-x: auto; }
+.tabs a { padding: 9px 14px; color: var(--fog); font-weight: 500; font-size: 13.5px; white-space: nowrap; border-bottom: 2px solid transparent; }
+.tabs a:hover { color: var(--frost); text-decoration: none; }
+.tabs a.on { color: #fff; border-bottom-color: var(--violet); }
+
+/* incident */
+.inc-head { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.steps { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); margin: 18px 0 0; padding: 0; }
+.steps li { list-style: none; text-align: center; font-size: 12px; color: var(--fog); position: relative; padding-top: 26px; }
+.steps li::before { content: ""; position: absolute; top: 4px; left: 50%; transform: translateX(-50%); width: 12px; height: 12px; border-radius: 50%; background: var(--canvas); box-shadow: inset 0 0 0 1px var(--edge-hi); z-index: 1; }
+.steps li::after { content: ""; position: absolute; top: 9px; left: -50%; width: 100%; height: 2px; background: var(--edge); }
 .steps li:first-child::after { display: none; }
 .steps li.done { color: var(--frost); }
-.steps li.done::before { background: var(--teal); box-shadow: 0 0 10px rgba(38,150,132,.6); }
+.steps li.done::before { background: var(--teal); box-shadow: 0 0 8px rgba(38,150,132,.6); }
 .steps li.done::after { background: rgba(38,150,132,.6); }
 .steps li.now { color: var(--ice); font-weight: 500; }
-.steps li.now::before { background: var(--violet); box-shadow: 0 0 0 4px rgba(102,58,243,.25), 0 0 14px rgba(102,58,243,.7); animation: pulse 1.6s ease-in-out infinite; }
+.steps li.now::before { background: var(--violet); box-shadow: 0 0 0 4px rgba(102,58,243,.25), 0 0 12px rgba(102,58,243,.7); animation: pulse 1.6s ease-in-out infinite; }
 .steps li.fail::before { background: var(--ember); }
-@media (max-width: 560px) { .steps li { font-size: 11px; } }
-
-/* root cause: the luminous plate */
-.cause-card { border-radius: var(--r-card); padding: 28px; background: rgba(5,6,15,.97); box-shadow: var(--modal-shadow), 0 0 0 1px rgba(102,58,243,.35), 0 0 60px rgba(102,58,243,.18); position: relative; overflow: hidden; }
-.cause-card::before { content: ""; position: absolute; inset: -40% -10% auto; height: 260px; background: radial-gradient(closest-side, rgba(102,58,243,.22), transparent); pointer-events: none; }
-.cause-card .cause { font: 500 clamp(30px, 4.6vw, 48px)/1.12 var(--display); margin: 0 0 4px; position: relative; overflow-wrap: anywhere; }
-.cause-card .rid { font: 400 13px var(--mono); color: var(--fog); margin: 0 0 16px; }
-.cause-card .plain { font-size: 18px; line-height: 1.55; color: var(--frost); margin: 0; position: relative; }
-.cause-card details { margin-top: 14px; color: var(--mist); font-size: 14px; }
+.cause-card { border-radius: var(--r-card); padding: 22px; background: rgba(5,6,15,.97); box-shadow: var(--modal-shadow), 0 0 0 1px rgba(102,58,243,.35), 0 0 48px rgba(102,58,243,.14); position: relative; overflow: hidden; }
+.cause-card::before { content: ""; position: absolute; inset: -60% -10% auto; height: 240px; background: radial-gradient(closest-side, rgba(102,58,243,.2), transparent); pointer-events: none; }
+.eyebrow { font: 400 11px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--mist); margin: 0 0 10px; }
+.cause-card .cause { font: 500 32px/1.15 var(--display); margin: 0; position: relative; overflow-wrap: anywhere; background: var(--skywash); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.cause-card .rid { font: 400 12px var(--mono); color: var(--fog); margin: 2px 0 12px; }
+.cause-card .plain { font-size: 16px; line-height: 1.55; color: var(--frost); margin: 0; position: relative; }
+.cause-card details { margin-top: 12px; color: var(--mist); font-size: 13px; position: relative; }
 .cause-card details p { margin: 8px 0 0; line-height: 1.6; overflow-wrap: anywhere; }
-.multi { margin: 18px 0 0; padding: 12px 16px; background: rgba(228,109,76,.14); color: #f6b3a0; border-radius: 10px; box-shadow: inset 0 0 0 1px rgba(228,109,76,.35); font-weight: 500; }
-.cause-card .foot { font-size: 13px; color: var(--fog); margin-top: 18px; display: flex; gap: 6px 14px; flex-wrap: wrap; }
+.cause-card .foot { font-size: 12px; color: var(--fog); margin-top: 14px; display: flex; gap: 4px 14px; flex-wrap: wrap; position: relative; }
+.multi { margin: 14px 0 0; padding: 10px 14px; background: rgba(228,109,76,.14); color: #f6b3a0; border-radius: 10px; box-shadow: inset 0 0 0 1px rgba(228,109,76,.35); font-weight: 500; position: relative; }
 details summary { cursor: pointer; color: var(--mist); }
-details summary:hover { color: var(--ice); }
-
-/* timeline */
-.timeline { list-style: none; margin: 0; padding: 0 0 0 4px; display: grid; gap: 0; }
-.timeline li { display: grid; grid-template-columns: 78px 16px minmax(0, 1fr); gap: 10px; font-size: 15px; align-items: baseline; padding: 6px 0; }
-.timeline .t { font: 400 12px var(--mono); color: var(--fog); }
-.timeline .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--steel); align-self: center; box-shadow: 0 0 0 3px var(--canvas); }
-.timeline li.ctx .txt { color: rgba(157,167,186,.6); }
-.timeline li.cause .txt { color: var(--ice); font-weight: 500; }
-.timeline li.cause .dot { background: var(--ember); box-shadow: 0 0 10px rgba(228,109,76,.8); }
-.timeline li.kalerts .txt { color: #f1cf86; }
-.timeline li.kalerts .dot { background: var(--amber); }
-.timeline li.kdecided .txt { color: var(--ice); font-weight: 600; }
-.timeline li.kdecided .dot { background: var(--violet); box-shadow: 0 0 10px rgba(102,58,243,.8); }
-.tag-cause { font-size: 11px; font-weight: 600; margin-left: 8px; padding: 2px 7px; border-radius: var(--r-badge); background: rgba(228,109,76,.2); color: #f29a80; vertical-align: 1px; }
-@media (max-width: 560px) { .timeline li { grid-template-columns: 64px 12px minmax(0, 1fr); font-size: 14px; } }
-
-/* proposed fix */
-.kv { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 8px 20px; margin: 16px 0 20px; font-size: 15px; }
+.kv { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 7px 18px; margin: 14px 0 16px; font-size: 13.5px; }
 .kv dt { color: var(--fog); }
 .kv dd { margin: 0; min-width: 0; overflow-wrap: anywhere; color: var(--frost); }
 .kv code { color: var(--blueprint); }
-.action + .action { margin-top: 20px; padding-top: 20px; box-shadow: 0 -1px 0 var(--edge); }
-.action h3 { font: 500 19px var(--display); margin: 0; color: var(--ice); text-transform: capitalize; }
-.action .why { margin: 10px 0 0; color: var(--mist); }
-input[type=text], input[type=password] { font-size: 15px; padding: 9px 12px; border-radius: var(--r-badge); border: 0; box-shadow: inset 0 0 0 1px var(--edge); background: rgba(199,211,234,.06); color: #fff; width: 100%; max-width: 340px; }
-input::placeholder { color: rgba(199,211,234,.6); }
-input:focus { outline: none; box-shadow: inset 0 0 0 1px var(--edge-hi), 0 0 0 3px rgba(102,58,243,.25); }
-
-/* graph */
-.graphbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; justify-content: space-between; margin-bottom: 12px; }
-.seg { display: inline-flex; padding: 3px; border-radius: var(--r-pill); background: var(--wash); box-shadow: inset 0 0 0 1px var(--edge); }
-.seg button { box-shadow: none; background: transparent; color: var(--fog); padding: 5px 14px; font-size: 13px; }
-.seg button[aria-pressed="true"] { background: var(--wash-hi); color: #fff; }
-#cy { height: 460px; border-radius: 12px; background: radial-gradient(ellipse at 50% 0%, rgba(124,145,182,.08), transparent 70%), rgba(5,6,15,.6); box-shadow: inset 0 0 0 1px var(--edge); }
-.nodeinfo { min-height: 22px; margin-top: 10px; font-size: 14px; color: var(--mist); }
-.nodeinfo b { color: var(--ice); font-weight: 500; }
-.legend { display: flex; gap: 8px 16px; flex-wrap: wrap; font-size: 13px; color: var(--fog); margin-top: 10px; }
-.legend i { display: inline-block; width: 20px; height: 0; border-top: 2px solid var(--mist); vertical-align: middle; margin-right: 6px; }
-.legend b { display: inline-block; width: 12px; height: 12px; border-radius: 50%; vertical-align: -1px; margin-right: 6px; }
-
-/* tables */
-.tablewrap { overflow-x: auto; }
-table { width: 100%; border-collapse: collapse; font-size: 14px; }
-th, td { text-align: left; padding: 10px; box-shadow: inset 0 -1px 0 var(--edge); vertical-align: top; }
-th { font: 400 11px var(--mono); color: var(--fog); text-transform: uppercase; letter-spacing: .08em; white-space: nowrap; }
-td.num { font-variant-numeric: tabular-nums; text-align: right; }
-tr.top td { color: var(--ice); }
-#scorecard tr.main td { box-shadow: none; padding-bottom: 2px; }
-#scorecard tr.ev td { padding-top: 0; font-size: 13px; color: var(--fog); }
-.cand b { display: block; font-weight: 500; color: var(--ice); }
-.cand code { color: var(--fog); font-size: 11.5px; }
-.bar { height: 6px; border-radius: 3px; background: var(--wash-hi); margin-top: 6px; min-width: 80px; overflow: hidden; }
+.action + .action { margin-top: 18px; padding-top: 18px; box-shadow: 0 -1px 0 var(--edge); }
+.action h3 { font: 500 17px var(--display); margin: 0; color: var(--ice); }
+.action .why { margin: 8px 0 0; color: var(--mist); }
+.as { font-size: 12.5px; color: var(--fog); }
+.timeline { list-style: none; margin: 0; padding: 0; }
+.timeline li { display: grid; grid-template-columns: 74px 14px minmax(0, 1fr); gap: 10px; font-size: 13.5px; align-items: baseline; padding: 6px 0; }
+.timeline .t { font: 400 11.5px var(--mono); color: var(--fog); }
+.timeline .d { width: 9px; height: 9px; border-radius: 50%; background: var(--steel); align-self: center; }
+.timeline li.ctx .x { color: rgba(157,167,186,.6); }
+.timeline li.cause .x { color: var(--ice); font-weight: 500; }
+.timeline li.cause .d { background: var(--ember); box-shadow: 0 0 10px rgba(228,109,76,.8); }
+.timeline li.kalerts .x { color: #f1cf86; }
+.timeline li.kalerts .d { background: var(--amber); }
+.timeline li.kdecided .x { color: var(--ice); font-weight: 600; }
+.timeline li.kdecided .d { background: var(--violet); box-shadow: 0 0 10px rgba(102,58,243,.8); }
+.tag-cause { font-size: 10.5px; font-weight: 600; margin-left: 8px; padding: 1px 7px; border-radius: var(--r-badge); background: rgba(228,109,76,.2); color: #f29a80; }
+.bar { height: 5px; border-radius: 3px; background: var(--wash-hi); margin-top: 6px; min-width: 70px; overflow: hidden; }
 .bar span { display: block; height: 100%; border-radius: 3px; background: linear-gradient(90deg, #98c0ef, #d8ecf8); }
-tr.top .bar span { background: linear-gradient(90deg, var(--violet), #b39bff); }
-#trace td:nth-child(4) code { overflow-wrap: anywhere; color: var(--mist); }
-#trace td:nth-child(4) { min-width: 180px; }
-#trace code { color: var(--frost); }
-pre { background: rgba(5,6,15,.8); box-shadow: inset 0 0 0 1px var(--edge); color: var(--mist); padding: 12px; border-radius: 10px; overflow-x: auto; white-space: pre-wrap; word-break: break-word; margin: 8px 0; }
-.chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
-.chips button { padding: 5px 12px; font-size: 13px; color: var(--mist); }
-.chips button[aria-pressed="true"] { background: var(--wash-hi); color: #fff; box-shadow: inset 0 0 0 1px var(--edge-hi); }
+tr.lead .bar span { background: linear-gradient(90deg, var(--violet), #b39bff); }
+pre { background: rgba(5,6,15,.8); box-shadow: inset 0 0 0 1px var(--edge); color: var(--mist); padding: 10px; border-radius: 8px; overflow-x: auto; white-space: pre-wrap; word-break: break-word; margin: 8px 0; }
 
-/* empty state */
-.empty { text-align: center; padding: 48px 24px; }
-.empty h2 { font: 500 clamp(26px, 3.4vw, 36px)/1.2 var(--display); margin: 0 0 8px; color: var(--ice); }
-.empty p { color: var(--mist); margin: 0 auto 22px; max-width: 520px; }
-.err { color: #f29a80; }
+/* graph, topology, charts */
+.cyb { height: 520px; border-radius: 12px; background: radial-gradient(ellipse at 50% 0%, rgba(124,145,182,.07), transparent 70%), rgba(5,6,15,.6); box-shadow: inset 0 0 0 1px var(--edge); }
+.legend { display: flex; gap: 6px 14px; flex-wrap: wrap; font-size: 12px; color: var(--fog); margin-top: 10px; }
+.legend i { display: inline-block; width: 18px; height: 0; border-top: 2px solid var(--mist); vertical-align: middle; margin-right: 6px; }
+.legend b { display: inline-block; width: 10px; height: 10px; border-radius: 50%; vertical-align: -1px; margin-right: 6px; }
+.topo { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; align-items: start; }
+@media (max-width: 1100px) { .topo { grid-template-columns: minmax(0, 1fr); } }
+.topo .cyb { height: calc(100vh - 210px); min-height: 440px; }
+.list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.list li { padding: 7px 10px; border-radius: 8px; background: var(--wash); font-size: 13px; }
+.chart { display: flex; align-items: flex-end; gap: 6px; height: 140px; padding-top: 8px; }
+.chart div { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; height: 100%; justify-content: flex-end; }
+.chart span.b { width: 100%; max-width: 24px; border-radius: 4px 4px 2px 2px; background: linear-gradient(180deg, #98c0ef, rgba(152,192,239,.3)); min-height: 2px; }
+.chart small { font-size: 10px; color: var(--dim); font-family: var(--mono); }
+.lb { display: grid; grid-template-columns: minmax(0, 1fr) 110px; gap: 8px 14px; align-items: center; font-size: 13px; }
+.lb .bar { margin: 0; }
+.statusdot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex: none; }
+.statusdot.ok { background: var(--teal); box-shadow: 0 0 8px rgba(38,150,132,.8); }
+.statusdot.warn { background: var(--amber); }
+.statusdot.off { background: var(--steel); }
+.statusdot.bad { background: var(--ember); }
 
-/* feed */
-.feed { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; max-height: 420px; overflow-y: auto; }
-.feed li { font-size: 13px; line-height: 1.4; padding: 9px 11px; border-radius: 10px; background: var(--wash); color: var(--frost); }
-.feed .t { font: 400 11.5px var(--mono); color: var(--fog); }
-.feed .who { font-size: 12px; color: var(--fog); margin-top: 2px; }
-.feed li.agent { box-shadow: inset 2px 0 0 var(--teal); }
-.feed li.human { box-shadow: inset 2px 0 0 var(--ember); }
-
-/* how it works: icon-tile timeline */
-.flow { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; margin-top: 48px; position: relative; }
-.flow::before { content: ""; position: absolute; top: 32px; left: 8%; right: 8%; height: 1px; background: linear-gradient(90deg, transparent, var(--edge-hi), var(--edge-hi), transparent); }
-.flow > div { text-align: center; position: relative; }
-.tile { width: 64px; height: 64px; border-radius: 9999px; margin: 0 auto 14px; display: grid; place-items: center; background: #0a0c18; box-shadow: inset 0 0 0 1px var(--edge), inset 0 12px 24px rgba(168,216,245,.06), 0 0 24px rgba(124,145,182,.12); }
-.tile svg { width: 26px; height: 26px; stroke: var(--frost); fill: none; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
-.flow h4 { font: 500 16px var(--display); color: var(--ice); margin: 0 0 6px; }
-.flow p { font-size: 13.5px; color: var(--fog); margin: 0; line-height: 1.45; }
-@media (max-width: 920px) { .flow { grid-template-columns: repeat(3, minmax(0, 1fr)); row-gap: 32px; } .flow::before { display: none; } }
-@media (max-width: 520px) { .flow { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-
-.three { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 44px; }
-@media (max-width: 860px) { .three { grid-template-columns: minmax(0, 1fr); } }
-.three h4 { font: 500 19px var(--display); color: var(--ice); margin: 12px 0 8px; }
-.three p { margin: 0; color: var(--mist); font-size: 15px; }
-.three .tile { margin: 0; width: 48px; height: 48px; }
-.three .tile svg { width: 22px; height: 22px; }
-
-.results td { font-size: 15px; color: var(--frost); }
-.results td:last-child { font: 500 15px var(--mono); color: var(--ice); white-space: nowrap; }
-footer { margin-top: 120px; padding: 32px 0 48px; box-shadow: 0 -1px 0 var(--edge); color: var(--fog); font-size: 14px; }
-footer .wrap { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+/* modal + toast */
+.scrim { position: fixed; inset: 0; background: rgba(2,3,8,.66); backdrop-filter: blur(3px); display: grid; place-items: center; z-index: 100; padding: 16px; }
+.modal { width: 100%; max-width: 500px; border-radius: var(--r-card); padding: 24px; background: rgba(5,6,15,.98); box-shadow: var(--modal-shadow), 0 0 0 1px var(--edge-hi); }
+.modal h3 { font: 500 20px var(--display); margin: 0 0 8px; color: var(--ice); }
+.modal p { color: var(--mist); margin: 0 0 12px; }
+.modal .btns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+.toasts { position: fixed; right: 18px; bottom: 18px; display: grid; gap: 8px; z-index: 120; max-width: min(420px, calc(100vw - 36px)); }
+.toast { padding: 12px 14px; border-radius: 12px; background: #0d1020; box-shadow: var(--modal-shadow), 0 0 0 1px var(--edge-hi); font-size: 13px; color: var(--frost); }
+.toast.bad { box-shadow: var(--modal-shadow), 0 0 0 1px rgba(228,109,76,.5); }
 </style>
 </head>
 <body>
 <div class="atmos" aria-hidden="true"></div>
-<div class="spot" aria-hidden="true"></div>
-
-<nav>
-  <div class="wrap">
-    <a class="logo" href="#top" aria-label="rootgraph home">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><defs><linearGradient id="lg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#d8ecf8"/><stop offset="1" stop-color="#98c0ef"/></linearGradient></defs>
-        <circle cx="12" cy="4" r="2.6" fill="url(#lg)"/><circle cx="5" cy="19" r="2.6" fill="url(#lg)"/><circle cx="19" cy="19" r="2.6" fill="url(#lg)"/>
-        <path d="M12 6.5 6 16.6M12 6.5l6 10.1M7.6 19h8.8" stroke="#98c0ef" stroke-width="1.4" fill="none"/></svg>
-      rootgraph</a>
-    <div class="right">
-      <div class="navlinks">
-        <a class="navlink" href="#try">Try it</a>
-        <a class="navlink" href="#how">How it works</a>
-        <a class="navlink" href="#proof">Real AWS</a>
-      </div>
-      <span id="tokenBox" hidden><input type="password" id="token" placeholder="Operator token" aria-label="Operator token" style="max-width:170px;padding:6px 10px;font-size:13px"></span>
-      <a class="btn outline small" id="mode" href="#"></a>
-      <a class="btn outline small" href="https://github.com/guranshdeol/graph-incident-responder" target="_blank" rel="noopener">GitHub</a>
-    </div>
-  </div>
-</nav>
-
-<header class="hero" id="top">
-  <div class="wrap">
-    <p class="eyebrow center" id="heroEyebrow">Incident root cause · on a FalkorDB graph</p>
-    <h1 class="glow"><span class="sky">Many alerts.</span><br><span class="sky">One cause.</span></h1>
-    <p class="sub">When ten alerts fire at once, rootgraph walks a live graph of your infrastructure to find the one change behind them, proves it with the network path and who changed what, and proposes the exact undo. A person approves it; rootgraph checks it worked and remembers.</p>
-    <div class="ctas">
-      <button class="primary" id="heroGo">Run the first incident</button>
-      <a class="btn outline" href="#how">How it works</a>
-    </div>
-    <div class="stats">
-      <div class="stat"><b>8</b><span>scenarios to break</span></div>
-      <div class="stat"><b>12</b><span>read-only graph tools</span></div>
-      <div class="stat"><b>52–93 s</b><span>to fix hand-made faults on real AWS</span></div>
-      <div class="stat"><b>0</b><span>changes without a human's approval</span></div>
-    </div>
-  </div>
-</header>
-
-<section class="block" id="try">
-  <div class="wrap">
-    <p class="eyebrow center" id="tryEyebrow">Try it · sandbox</p>
-    <h2 class="section" id="tryTitle">Break something. Watch the graph find it.</h2>
-    <p class="lede" id="tryLede">Each scenario breaks a synthetic copy of our AWS estate. rootgraph gets only the alerts and has to work out the cause itself. Start with S1.</p>
-    <div class="groups" id="scenarios"></div>
-    <div class="note" id="sandboxNote" hidden><span>Sandbox: a synthetic estate. Approving a fix only changes the graph.</span><button class="outline small" id="resetBtn">Reset sandbox</button></div>
-
-    <div class="app" id="app">
-      <aside>
-        <div class="card">
-          <p class="eyebrow">Incidents</p>
-          <ul class="incidents" id="incidents"></ul>
-        </div>
-        <div class="card">
-          <p class="eyebrow" id="feedTitle">What changed</p>
-          <p class="meta" id="feedNote" style="margin:-6px 0 12px;font-size:13px"></p>
-          <ul class="feed" id="feed"></ul>
-        </div>
-      </aside>
-
-      <main>
-        <div class="card empty" id="placeholder">
-          <h2>No incident open.</h2>
-          <p id="placeholderText">Pick a scenario above. S1 is the classic: one firewall rule disappears and four services start failing at once.</p>
-          <button class="primary" id="placeholderGo">Run S1</button>
-        </div>
-
-        <div id="incident" class="stack" hidden>
-          <div class="card">
-            <div class="inc-head">
-              <h1 id="incId"></h1>
-              <span id="incStatus"></span>
-              <span id="incTtr" class="meta"></span>
-            </div>
-            <div class="alerts" id="alerts"></div>
-            <ol class="steps" id="steps"></ol>
-          </div>
-
-          <div class="cause-card">
-            <p class="eyebrow">Most likely root cause</p>
-            <p class="cause"><span class="sky" id="cause"></span></p>
-            <p class="rid" id="causeRid"></p>
-            <p class="plain" id="plain"></p>
-            <p class="multi" id="multi" hidden></p>
-            <details id="explDetails"><summary>Full evidence</summary><p id="explanation"></p></details>
-            <div class="foot"><span id="explainedBy"></span><span id="recall"></span></div>
-          </div>
-
-          <div class="card" id="whatCard" hidden>
-            <h2 class="title">What happened</h2>
-            <p class="intro">Every change in the account around the incident. The one that caused it is marked.</p>
-            <ol class="timeline" id="timeline"></ol>
-          </div>
-
-          <div class="card">
-            <h2 class="title">Proposed fix</h2>
-            <p class="intro">The exact undo of the change. Nothing runs until a person approves it.</p>
-            <input type="text" id="actor" placeholder="Your name, recorded as the approver" aria-label="Approver name">
-            <div id="proposals" style="margin-top:20px"></div>
-          </div>
-
-          <div class="card">
-            <div class="graphbar">
-              <h2 class="title" style="margin:0">Graph evidence</h2>
-              <div class="seg" role="group" aria-label="Graph view">
-                <button id="viewFocus" aria-pressed="true">This incident</button>
-                <button id="viewAll" aria-pressed="false">Whole estate</button>
-              </div>
-            </div>
-            <div id="cy"></div>
-            <div class="nodeinfo" id="nodeinfo">Click a node to see why it was or wasn't blamed.</div>
-            <div class="legend">
-              <span><i></i>depends on</span>
-              <span><i style="border-top:1.5px dashed var(--fog)"></i>runs on · protects</span>
-              <span><i style="border-top:3px solid var(--ember)"></i>broken path · the culprit rule</span>
-              <span><b style="background:transparent;box-shadow:inset 0 0 0 2px #f1cf86"></b>alerting</span>
-              <span><b style="background:var(--violet);box-shadow:0 0 8px var(--violet)"></b>root cause</span>
-            </div>
-          </div>
-
-          <div class="card">
-            <h2 class="title">Scorecard</h2>
-            <p class="intro">Every candidate the graph surfaced, scored on evidence. The busiest node is not always the guilty one.</p>
-            <div class="tablewrap"><table id="scorecard"></table></div>
-            <p class="fine">score = 3·coverage + 2·unhealthy − 2·healthy + 2·broken path + 2·change + 1·memory − 0.25·hops. Heuristic weights, tested on S1–S8.</p>
-          </div>
-
-          <div class="card">
-            <h2 class="title">Tool trace</h2>
-            <p class="intro">Every step is a fixed, human-written Cypher or PromQL query. The AI picks tools; it never writes queries. Open a row to see it.</p>
-            <div class="chips" id="traceChips"></div>
-            <div class="tablewrap"><table id="trace"></table></div>
-            <div style="margin-top:12px" id="traceMore"></div>
-          </div>
-        </div>
-      </main>
-    </div>
-  </div>
-</section>
-
-<section class="block" id="how">
-  <div class="wrap">
-    <p class="eyebrow center">How it works</p>
-    <h2 class="section"><span class="sky">From alert storm to one approved fix</span></h2>
-    <p class="lede">Every step reads the same FalkorDB graph: services, hosts, databases, firewall rules, every change and every past incident.</p>
-    <div class="flow">
-      <div><div class="tile"><svg viewBox="0 0 24 24"><path d="M12 3 2 20h20L12 3z"/><path d="M12 10v4M12 17h.01"/></svg></div><h4>Alerts arrive</h4><p>Prometheus fires; Alertmanager groups them into one incident.</p></div>
-      <div><div class="tile"><svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/><path d="M11 7 6 17M13 7l5 10"/></svg></div><h4>Walk the graph</h4><p>Upward from every alert to what they share: the candidates.</p></div>
-      <div><div class="tile"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="m20 20-4.5-4.5"/></svg></div><h4>Gather evidence</h4><p>Is the network path open? Who changed what, when? Is it healthy?</p></div>
-      <div><div class="tile"><svg viewBox="0 0 24 24"><rect x="4" y="6" width="16" height="12" rx="3"/><path d="M9 11h.01M15 11h.01M9 15h6M12 3v3"/></svg></div><h4>AI double-checks</h4><p>An LLM calls the same read-only tools to test the ranking, then explains it.</p></div>
-      <div><div class="tile"><svg viewBox="0 0 24 24"><path d="M5 12.5 10 17l9-10"/></svg></div><h4>A person approves</h4><p>The exact undo, its blast radius and rollback. Nothing runs before that.</p></div>
-      <div><div class="tile"><svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4h4"/></svg></div><h4>Verify, remember</h4><p>Alerts must clear. The fix is saved; next time it is offered first.</p></div>
-    </div>
-  </div>
-</section>
-
-<section class="block" id="why">
-  <div class="wrap">
-    <p class="eyebrow center">Why a graph</p>
-    <h2 class="section">Logs show symptoms. <span class="sky">Relationships show causes.</span></h2>
-    <div class="three">
-      <div class="card lift"><div class="tile"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h10M4 17h6"/></svg></div>
-        <h4>Ten alerts, one ancestor</h4><p>Four services fail because they share one database path. Only the dependency graph shows they share it.</p></div>
-      <div class="card lift"><div class="tile"><svg viewBox="0 0 24 24"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></div>
-        <h4>The path is the proof</h4><p>"Is payments allowed to reach the database?" is a graph query over services, hosts and firewall rules, answered in milliseconds.</p></div>
-      <div class="card lift"><div class="tile"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg></div>
-        <h4>Changes and memory live in it</h4><p>Every CloudTrail change, every removed rule and every past fix are nodes too, so "what changed?" and "seen before?" are one hop away.</p></div>
-    </div>
-  </div>
-</section>
-
-<section class="block" id="proof">
-  <div class="wrap">
-    <p class="eyebrow center">Proven on real AWS</p>
-    <h2 class="section">We broke a real AWS account by hand.</h2>
-    <p class="lede">Nobody told rootgraph what changed. Measured from incident open to verified fix, with a person approving each one (17 Oct 2026, Sydney).</p>
-    <div class="card" style="margin-top:40px">
-      <div class="tablewrap"><table class="results">
-        <tr><th>Change made by hand</th><th>rootgraph's conclusion</th><th>Undo it proposed</th><th>Fixed in</th></tr>
-        <tr><td>Database security group detached in the RDS console</td><td>orders-db lost its security group; 12 alerts across both hosts</td><td>Re-attach the group</td><td>52 s</td></tr>
-        <tr><td>host-2 stopped in the EC2 console</td><td>host-2 went running → stopped; its services are victims</td><td>Start the instance</td><td>64 s</td></tr>
-        <tr><td><code>docker stop payments</code> on host-1</td><td>payments is down; the network is fine</td><td>Start the container</td><td>93 s</td></tr>
-        <tr><td>Firewall rule revoked</td><td>The exact rule that let host-1 reach the database</td><td>Re-add that rule</td><td>92 s</td></tr>
-        <tr><td>Firewall rule edited, port 5432 → 5433</td><td>"Rule edited", with the old and new values</td><td>Edit it back</td><td>verified</td></tr>
-      </table></div>
-    </div>
-    <div class="three">
-      <div class="card"><h4>Undo-only permissions</h4><p>The executor's IAM user can re-add rules, re-attach groups and start instances. It cannot delete or stop anything.</p></div>
-      <div class="card"><h4>No AI-written queries</h4><p>The model chooses among 12 fixed, reviewed Cypher queries and must give a reason for each call. A validator checks its answer.</p></div>
-      <div class="card"><h4>Honest when unsure</h4><p>Two causes close together? It says "multiple likely causes" and proposes a fix for each. Not modelled? It says so instead of guessing.</p></div>
-    </div>
-  </div>
-</section>
-
-<footer>
-  <div class="wrap">
-    <span>rootgraph · WeMakeDevs × FalkorDB "Graph Hacks: Context for AI Agents" · Track 01 agents · Track 02 memory</span>
-    <span><a href="https://github.com/guranshdeol/graph-incident-responder" target="_blank" rel="noopener">Source on GitHub</a></span>
-  </div>
-</footer>
+<div id="root"></div>
+<div class="toasts" id="toasts" aria-live="polite"></div>
 
 <script>
+/* ---------- helpers ---------- */
 const $ = (id) => document.getElementById(id);
 const el = (tag, attrs = {}, ...kids) => {
   const n = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs)) {
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v == null || v === false) continue;
     if (k === "class") n.className = v; else if (k.startsWith("on")) n.addEventListener(k.slice(2), v); else n.setAttribute(k, v);
   }
   for (const k of kids.flat()) if (k != null && k !== false) n.append(k instanceof Node ? k : String(k));
   return n;
 };
-const fmtTime = (t) => t ? new Date(t * 1000).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }) : "";
-const store = { get(k) { try { return localStorage.getItem(k); } catch { return null; } },
-                set(k, v) { try { localStorage.setItem(k, v); } catch {} } };
+const svgEl = (d, cls = "i") => { const s = document.createElementNS("http://www.w3.org/2000/svg", "svg"); s.setAttribute("viewBox", "0 0 24 24"); if (cls) s.setAttribute("class", cls); s.innerHTML = d; return s; };
+const I = {
+  overview: '<rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/>',
+  incidents: '<path d="M12 3 2 20h20L12 3z"/><path d="M12 10v4M12 17h.01"/>',
+  changes: '<path d="M4 7h11M4 12h16M4 17h8"/><circle cx="19" cy="7" r="1.6"/>',
+  actions: '<path d="M5 12.5 10 17l9-10"/>',
+  topology: '<circle cx="12" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/><path d="M11 7 6 17M13 7l5 10M7 19h10"/>',
+  memory: '<path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4h4"/><path d="M12 8v4l3 2"/>',
+  integrations: '<path d="M9 7V3M15 7V3M7 7h10v4a5 5 0 0 1-10 0V7zM12 16v5"/>',
+  menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
+  chevron: '<path d="m7 10 5 5 5-5"/>',
+  logout: '<path d="M15 4h4v16h-4M10 8l-4 4 4 4M6 12h10"/>',
+  bolt: '<path d="M13 3 5 13h6l-1 8 8-10h-6l1-8z"/>',
+};
+const LOGO = '<defs><linearGradient id="lg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#d8ecf8"/><stop offset="1" stop-color="#98c0ef"/></linearGradient></defs><circle cx="12" cy="4" r="2.6" fill="url(#lg)"/><circle cx="5" cy="19" r="2.6" fill="url(#lg)"/><circle cx="19" cy="19" r="2.6" fill="url(#lg)"/><path d="M12 6.5 6 16.6M12 6.5l6 10.1M7.6 19h8.8" stroke="#98c0ef" stroke-width="1.4" fill="none"/>';
+const logo = () => svgEl(LOGO, null);
+const store = { get(k) { try { return localStorage.getItem(k); } catch { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch {} } };
+const fmtTime = (t) => t ? new Date(t * 1000).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }) : "—";
+const hhmmss = (t) => new Date(t * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+const ago = (t) => { if (!t) return "never"; const s = Math.max(0, Date.now() / 1000 - t);
+  return s < 60 ? `${Math.round(s)}s ago` : s < 3600 ? `${Math.round(s / 60)} min ago` : s < 86400 ? `${Math.round(s / 3600)} h ago` : `${Math.round(s / 86400)} d ago`; };
+const dur = (s) => s == null ? "—" : s < 120 ? `${s}s` : s < 7200 ? `${Math.round(s / 60)} min` : `${Math.round(s / 3600)} h`;
+function toast(msg, bad) { const t = el("div", { class: "toast" + (bad ? " bad" : "") }, msg); $("toasts").append(t); setTimeout(() => t.remove(), 6000); }
+function modal(title, body, okLabel = "Confirm") {
+  return new Promise(resolve => {
+    const close = (v) => { scrim.remove(); document.removeEventListener("keydown", esc); resolve(v); };
+    const esc = (e) => { if (e.key === "Escape") close(false); };
+    const ok = el("button", { class: "primary", onclick: () => close(true) }, okLabel);
+    const scrim = el("div", { class: "scrim", onclick: (e) => { if (e.target === scrim) close(false); } },
+      el("div", { class: "modal", role: "dialog", "aria-modal": "true", "aria-label": title }, el("h3", {}, title), ...(Array.isArray(body) ? body : [body]),
+        el("div", { class: "btns" }, el("button", { class: "ghost", onclick: () => close(false) }, "Cancel"), ok)));
+    document.addEventListener("keydown", esc); document.body.append(scrim); ok.focus();
+  });
+}
 
-let current = null, cy = null, sandboxMode = true, pollTimer = null, lastRep = null, graphView = "focus", traceFilter = "all", traceAll = false;
-let NAMES = {}, KINDS = {};
-const nm = (rid) => NAMES[rid] && NAMES[rid] !== rid ? NAMES[rid] : rid;
+/* ---------- state ---------- */
+const S = { user: null, env: store.get("rg.env") || "prod", names: {}, kinds: {}, graph: null, route: [], cy: null, timer: null,
+            graphView: "focus", traceFilter: "all", traceAll: false };
+if (location.pathname.startsWith("/live")) { store.set("rg.env", "prod"); location.replace("/" + (location.hash || "#/overview")); }
+const base = () => S.env === "prod" ? "/live/" : "/";
+const nm = (rid) => S.names[rid] && S.names[rid] !== rid ? S.names[rid] : rid;
+const isOp = () => S.user && S.user.role === "operator";
 
-async function api(path, opts = {}) {
-  const headers = { "Content-Type": "application/json" };
-  const token = store.get("rootgraph.token");
-  if (token && !sandboxMode) headers.Authorization = `Bearer ${token}`;
-  const r = await fetch(path, { headers, ...opts });
+async function req(url, opts = {}) {
+  const r = await fetch(url, { credentials: "same-origin", headers: { "Content-Type": "application/json" }, ...opts });
   const body = await r.json().catch(() => ({}));
+  if (r.status === 401 && url !== "/auth/login") { S.user = null; renderSignIn("Your session ended. Please sign in again."); throw new Error("Signed out"); }
   if (!r.ok) throw new Error(body.detail || r.statusText);
   return body;
 }
-let graphCache = null;
+const api = (path, opts) => req(base() + "api/" + path, opts);
+const post = (path, body) => api(path, { method: "POST", body: JSON.stringify(body || {}) });
+
+const kindOf = (kinds) => ["Service", "Compute", "Database", "Firewall", "Network", "Internet", "CidrBlock"].find(k => kinds.includes(k)) || "Resource";
+const KLABEL = { Service: "service", Compute: "instance", Database: "database", Firewall: "security group", Network: "network", Internet: "internet", CidrBlock: "address range" };
 async function loadGraph() {
-  graphCache = await api("api/graph");
-  NAMES = Object.fromEntries(graphCache.nodes.map(n => [n.rid, n.name || n.rid]));
-  KINDS = Object.fromEntries(graphCache.nodes.map(n => [n.rid, kindOf(n.kinds)]));
-  return graphCache;
+  S.graph = await api("graph");
+  S.names = Object.fromEntries(S.graph.nodes.map(n => [n.rid, n.name || n.rid]));
+  S.kinds = Object.fromEntries(S.graph.nodes.map(n => [n.rid, kindOf(n.kinds)]));
 }
 
-/* ---------- scenarios ---------- */
-const SCEN = {
-  s1: ["A firewall rule is deleted: host-1 can no longer reach the database.", "Look for: the broken path, and host-1 scoring low because it is healthy."],
-  s6: ["A port typo: the database rule changes from 5432 to 5433.", "Look for: \"rule edited\" with old and new values, and an edit-back fix."],
-  s8: ["host-1's security group is detached from the instance.", "Look for: \"security group detached\" and a re-attach fix."],
-  s2: ["A CPU hog saturates host-2, slowing both services on it.", "Look for: the shared host winning on probe evidence."],
-  s3: ["The payments container stops. Not a network problem.", "Look for: a restart fix with its blast radius."],
-  s7: ["host-2 is stopped; everything on it goes dark.", "Look for: the host as the cause, its services as victims."],
-  s4: ["S1 happens again. rootgraph has seen this before.", "Look for: \"Seen before\" and the past fix pre-filled. Run S1 first."],
-  s5: ["Two faults at once: a rule deleted and a service down.", "Look for: \"Multiple likely causes\" and one fix for each."],
-};
-const GROUPS = [["Network changes", ["s1", "s6", "s8"]], ["Compute and services", ["s2", "s3", "s7"]], ["Memory and ambiguity", ["s4", "s5"]]];
-const HAND = [
-  ["Edit a rule", "EC2 → Security Groups → rootgraph-db → edit the 5432 rule from rootgraph-host1 to 5433.", "rootgraph proposes: edit it back."],
-  ["Delete a rule", "Same screen: delete that 5432 rule.", "rootgraph proposes: re-add the exact rule."],
-  ["Detach a security group", "RDS → orders-db → Modify: swap rootgraph-db for default, apply immediately.", "rootgraph proposes: re-attach rootgraph-db."],
-  ["Stop a server", "EC2 → Instances → rootgraph-host2 → Stop. (Never host-1: it runs Prometheus.)", "rootgraph proposes: start it."],
-  ["Stop a container", "On a host: docker stop payments.", "rootgraph proposes: start it, with the blast radius."],
-];
-
-async function inject(name, btn) {
-  if (btn) { btn.disabled = true; btn.setAttribute("aria-busy", "true"); }
-  try {
-    const r = await api(`api/scenarios/${name}/inject`, { method: "POST" });
-    await refreshList(); await openIncident(r.incident_id);
-    $("app").scrollIntoView({ behavior: "smooth", block: "start" });
-  } catch (err) { alert(err.message); }
-  finally { if (btn) { btn.disabled = false; btn.removeAttribute("aria-busy"); } }
+/* ---------- sign-in ---------- */
+function renderSignIn(msg) {
+  clearInterval(S.timer); window.onhashchange = null;
+  const u = el("input", { type: "text", id: "u", autocomplete: "username", required: "" });
+  const p = el("input", { type: "password", id: "p", autocomplete: "current-password", required: "" });
+  const err = el("p", { class: "err", role: "alert" }, msg || "");
+  const btn = el("button", { class: "primary", type: "submit" }, "Sign in");
+  const form = el("form", { onsubmit: async (e) => {
+    e.preventDefault(); btn.disabled = true; err.textContent = "";
+    try { S.user = await req("/auth/login", { method: "POST", body: JSON.stringify({ username: u.value.trim(), password: p.value }) }); start(); }
+    catch (x) { err.textContent = x.message; btn.disabled = false; }
+  } }, el("div", { class: "field" }, el("label", { for: "u" }, "Username"), u), el("div", { class: "field" }, el("label", { for: "p" }, "Password"), p), btn, err);
+  $("root").replaceChildren(el("div", { class: "signin" }, el("div", { class: "authcard" },
+    el("div", { class: "mark" }, logo()), el("h1", {}, "rootgraph"), el("p", { class: "sub" }, "Sign in to your operations console"),
+    form, el("p", { class: "foot" }, "Access is per person. Every approval is recorded under your name."))));
+  document.title = "Sign in · rootgraph";
+  u.focus();
 }
 
-async function loadScenarios() {
-  const data = await api("api/scenarios");
-  sandboxMode = data.sandbox;
-  $("tokenBox").hidden = data.sandbox;
-  $("mode").textContent = data.sandbox ? "Live AWS →" : "← Sandbox";
-  $("mode").href = data.sandbox ? "live/" : "../";
-  $("mode").title = data.sandbox ? "The real AWS estate (operator token needed)" : "The public sandbox";
-  $("sandboxNote").hidden = !data.sandbox;
-  if (!data.sandbox) {
-    $("heroEyebrow").textContent = "Live · real AWS account, Sydney";
-    $("tryEyebrow").textContent = "Live · real AWS";
-    $("tryTitle").textContent = "Change the real account by hand.";
-    $("tryLede").textContent = "Make one change in the AWS console (Sydney). It shows up under \"What changed\" within a minute or two, real alerts follow, and rootgraph finds it. Paste the operator token in the top bar first.";
-    $("heroGo").textContent = "See the incidents";
-    $("placeholderText").textContent = "Make one change from the list above in the AWS console, or use the backup button. The incident appears here within 1–3 minutes.";
-    $("placeholderGo").hidden = true;
-    const backup = el("button", { class: "outline", onclick: async (e) => {
-      if (!confirm("Revoke rule A on the real AWS estate? Real alerts will fire; rootgraph investigates and you approve the fix.")) return;
-      const b = e.currentTarget; b.disabled = true;
-      try { const r = await api("api/live/break", { method: "POST" }); alert(`Revoked ${r.revoked}. ${r.next}.`); }
-      catch (err) { alert(err.message); } finally { b.disabled = false; }
-    } }, "Backup: break it for me (revoke rule A)");
-    $("scenarios").replaceWith(el("div", { class: "handlist", id: "scenarios" },
-      ...HAND.map(([t, how, fix]) => el("div", { class: "card" }, el("h4", {}, t), el("p", {}, how), el("small", {}, fix)))));
-    $("sandboxNote").hidden = false;
-    $("sandboxNote").replaceChildren(el("span", {}, "One change at a time. No console handy?"), backup);
-    return;
+/* ---------- shell ---------- */
+const PAGES = [["overview", "Overview"], ["incidents", "Incidents"], ["changes", "Changes"], ["actions", "Actions"], ["topology", "Topology"], ["memory", "Memory"], ["integrations", "Integrations"]];
+function closeMenus() { document.querySelectorAll(".menu").forEach(m => m.hidden = true); }
+document.addEventListener("click", (e) => { if (!e.target.closest(".menu")) closeMenus(); if (!e.target.closest(".side, .menubtn")) $("side")?.classList.remove("open"); });
+function renderShell() {
+  const envMenu = el("div", { class: "menu", hidden: "" },
+    el("button", { onclick: () => switchEnv("prod") }, el("span", { class: "dot prod" }), el("span", {}, el("b", {}, "Production"), el("br"), el("small", { class: "muted" }, "AWS ap-southeast-2 · the real estate"))),
+    el("button", { onclick: () => switchEnv("staging") }, el("span", { class: "dot stage" }), el("span", {}, el("b", {}, "Staging"), el("br"), el("small", { class: "muted" }, "Simulated copy · fault drills"))));
+  const envBtn = el("button", { class: "envbtn", "aria-haspopup": "true", "aria-label": "Switch environment", onclick: (e) => { e.stopPropagation(); const h = envMenu.hidden; closeMenus(); envMenu.hidden = !h; } },
+    el("span", { class: "dot " + (S.env === "prod" ? "prod" : "stage") }),
+    el("span", { class: "lbl" }, el("b", {}, S.env === "prod" ? "Production" : "Staging"), el("small", {}, S.env === "prod" ? "AWS ap-southeast-2" : "Simulated estate")), svgEl(I.chevron));
+  const nav = el("nav", { class: "nav", "aria-label": "Console" }, ...PAGES.map(([k, label]) =>
+    el("a", { href: `#/${k}`, id: "nav-" + k }, svgEl(I[k]), label, k === "incidents" ? el("span", { class: "count", id: "openCount", hidden: "" }) : null)));
+  const side = el("aside", { class: "side", id: "side" }, el("div", { class: "brand" }, logo(), "rootgraph"), el("div", { class: "envsel" }, envBtn, envMenu), nav,
+    el("div", { class: "me" }, el("span", { class: "avatar" }, S.user.name[0]), el("span", { class: "who" }, el("b", {}, S.user.name), el("small", {}, S.user.role)),
+      el("button", { class: "ghost", title: "Sign out", "aria-label": "Sign out", onclick: signOut }, svgEl(I.logout))));
+  const top = el("header", { class: "top" },
+    el("button", { class: "ghost menubtn", "aria-label": "Menu", onclick: (e) => { e.stopPropagation(); $("side").classList.toggle("open"); } }, svgEl(I.menu)),
+    el("div", { style: "min-width:0" }, el("div", { class: "crumb", id: "crumb" }), el("h1", { id: "title" })),
+    el("div", { class: "actions", id: "topActions" }));
+  $("root").replaceChildren(el("div", { class: "shell" }, side, el("div", { class: "main" }, top, el("main", { class: "content", id: "page" }))));
+}
+async function signOut() { await req("/auth/logout", { method: "POST" }).catch(() => {}); S.user = null; renderSignIn(); }
+function switchEnv(env) { closeMenus(); if (env === S.env) return; S.env = env; store.set("rg.env", env); S.graph = null; S.names = {}; S.kinds = {}; start(); }
+
+function topActions() {
+  const box = $("topActions"); box.replaceChildren();
+  if (!isOp()) return;
+  if (S.env === "staging") {
+    const menu = el("div", { class: "menu", hidden: "", style: "left:auto;right:0;width:330px" }, el("div", { class: "hint" }, "Run a fault drill on the simulated estate"));
+    api("scenarios").then(d => {
+      const DESC = { s1: "A database firewall rule is deleted", s2: "CPU saturation on host-2", s3: "The payments container stops", s4: "The firewall drill again (tests memory)",
+                     s5: "Two faults at the same time", s6: "A database firewall rule is edited", s7: "host-2 is stopped", s8: "host-1's security group is detached" };
+      menu.append(...d.scenarios.map(s => el("button", { onclick: () => simulate(s) }, el("span", {}, el("b", {}, s.title), el("br"), el("small", { class: "muted" }, DESC[s.name] || "")))),
+        el("button", { class: "danger", style: "box-shadow:0 -1px 0 var(--edge);border-radius:0 0 8px 8px;margin-top:4px", onclick: resetStaging }, "Reset staging"));
+    }).catch(() => {});
+    box.append(el("button", { class: "primary", onclick: (e) => { e.stopPropagation(); const h = menu.hidden; closeMenus(); menu.hidden = !h; } }, svgEl(I.bolt), "Simulate incident"), menu);
+  } else {
+    box.append(el("button", { onclick: liveDrill }, svgEl(I.bolt), "Fault drill"));
   }
-  const byName = Object.fromEntries(data.scenarios.map(s => [s.name, s]));
-  $("scenarios").replaceChildren(...GROUPS.map(([label, names]) => el("div", { class: "group" }, el("h3", {}, label),
-    ...names.filter(n => byName[n]).map(n => {
-      const [what, look] = SCEN[n] || ["", ""];
-      return el("button", { class: "scen" + (n === "s1" ? " first" : ""), onclick: (e) => inject(n, e.currentTarget) },
-        n === "s1" ? el("span", { class: "start" }, "Start here") : null,
-        el("span", { class: "tag" }, n.toUpperCase()), el("span", { class: "name" }, byName[n].title),
-        el("span", { class: "what" }, what), el("span", { class: "look" }, look));
-    }))));
+}
+async function simulate(s) {
+  closeMenus();
+  if (!await modal(`Run drill: ${s.title}?`, el("p", {}, "Faults and alerts are injected into the staging estate only. rootgraph investigates as if they were real; the fix still needs an operator's approval."), "Run drill")) return;
+  try { const r = await post(`scenarios/${s.name}/inject`); toast("Drill started. rootgraph is investigating."); location.hash = `#/incidents/${r.incident_id}`; }
+  catch (e) { toast(e.message, true); }
+}
+async function resetStaging() {
+  closeMenus();
+  if (!await modal("Reset staging?", el("p", {}, "Reloads the simulated estate and deletes every staging incident, action and memory."), "Reset")) return;
+  try { await post("sandbox/reset"); await loadGraph(); toast("Staging reset."); route(); } catch (e) { toast(e.message, true); }
+}
+async function liveDrill() {
+  const ok = await modal("Run a production fault drill?", [
+    el("p", {}, "A separate revoke-only IAM user removes the rule that lets host-1 reach orders-db. Real alerts fire within a minute; rootgraph investigates and an operator approves the fix."),
+    el("p", { class: "small muted" }, "Changes made by hand in the AWS console (edit or delete a security-group rule, detach a security group, stop host-2) are found the same way.")], "Run drill");
+  if (!ok) return;
+  try { const r = await post("live/break"); toast(`Rule ${r.revoked} revoked. Real alerts arrive in about a minute.`); location.hash = "#/incidents"; }
+  catch (e) { toast(e.message, true); }
 }
 
-/* ---------- change feed ---------- */
-const hhmmss = (t) => new Date(t * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+/* ---------- router ---------- */
+async function start() {
+  try { S.user = S.user || await req("/auth/me"); } catch { renderSignIn(); return; }
+  renderShell(); topActions();
+  await loadGraph().catch(() => {});
+  window.onhashchange = () => route();
+  route();
+  clearInterval(S.timer); S.timer = setInterval(tick, 5000); tick();
+}
+async function tick() {
+  try { const rows = await api("incidents?limit=100"); const n = rows.filter(r => r.status === "open").length;
+        const c = $("openCount"); if (c) { c.hidden = !n; c.textContent = n; } } catch {}
+  const p = S.route[0];
+  if (document.querySelector(".scrim") || document.querySelector(".menu:not([hidden])")) return;   // never redraw under an open dialog or menu
+  if (p === "overview" || (p === "incidents" && !S.route[1]) || p === "changes" || p === "actions") route(true);
+  else if (p === "incidents" && S.route[1]) { const s = document.querySelector("#incStatus .pill"); if (!s || !["resolved", "failed"].includes(s.textContent)) route(true); }
+}
+function setTitle(title, crumb) {
+  $("title").textContent = title; document.title = `${title} · rootgraph`;
+  $("crumb").replaceChildren(...(crumb || [S.env === "prod" ? "Production" : "Staging"]));
+}
+async function route(quiet) {
+  const parts = (location.hash.replace(/^#\/?/, "") || "overview").split("/").map(decodeURIComponent);
+  const changed = parts.join("/") !== S.route.join("/");
+  S.route = parts;
+  document.querySelectorAll(".nav a").forEach(a => a.classList.toggle("on", a.id === "nav-" + parts[0]));
+  const page = $("page"); if (!page) return;
+  if (changed) { S.traceAll = false; window.scrollTo(0, 0); }
+  try {
+    const fn = { overview: pOverview, incidents: parts[1] ? pIncident : pIncidents, changes: pChanges, actions: pActions,
+                 topology: pTopology, memory: pMemory, integrations: pIntegrations }[parts[0]] || pOverview;
+    await fn(page, parts, quiet && !changed);
+  } catch (e) { if (e.message !== "Signed out") page.replaceChildren(el("div", { class: "card" }, empty("Couldn't load this page", e.message))); }
+}
+
+/* ---------- shared bits ---------- */
+const PILL = { open: "open", proposed: "open", approved: "good", executed: "good", resolved: "done", verified: "done",
+               failed: "bad", rejected: "bad", unhealthy: "bad", degraded: "warn", healthy: "good" };
+const st = (s) => el("span", { class: "pill " + (PILL[s] || "") }, s ?? "—");
 const who = (c) => c.by_agent ? "rootgraph" : c.actor ? c.actor.replace(/^arn:aws:[a-z]+::\d*:/, "").replace(/^(user|assumed-role)\//, "") : (c.source === "graph_diff" ? "discovery" : "unknown");
-const said = (c) => c.source === "graph_diff" && !c.actor ? `discovery saw: ${describe(c)}` : `${who(c)} ${describe(c)}`;
+const whoPill = (c) => el("span", { class: "pill " + (c.by_agent ? "bot" : c.actor ? "person" : "sys") }, who(c));
 const res = (c) => (c.names && c.names.length ? c.names : c.resources || []).join(", ");
 function describe(c) {
   const r = res(c), e = c.event_name || c.event;
   const M = {
-    RevokeSecurityGroupIngress: `removed a firewall rule from ${r}`,
-    AuthorizeSecurityGroupIngress: `added a firewall rule to ${r}`,
-    ModifySecurityGroupRules: `edited a firewall rule on ${r}`,
-    SecurityGroupRuleRemoved: `a firewall rule disappeared from ${r}`,
+    RevokeSecurityGroupIngress: `removed a firewall rule from ${r}`, AuthorizeSecurityGroupIngress: `added a firewall rule to ${r}`,
+    ModifySecurityGroupRules: `edited a firewall rule on ${r}`, SecurityGroupRuleRemoved: `a firewall rule disappeared from ${r}`,
     SecurityGroupRuleModified: `a firewall rule on ${r} changed${c.before ? ` (was ${c.before})` : ""}`,
-    SecurityGroupDetached: `a security group was detached: ${c.before || r}`,
-    InstanceStateChanged: `${r} went ${c.before} → ${c.after}`,
+    SecurityGroupDetached: `a security group was detached: ${c.before || r}`, InstanceStateChanged: `${r} went ${c.before} → ${c.after}`,
     StopInstances: `stopped ${r}`, StartInstances: `started ${r}`, RebootInstances: `rebooted ${r}`,
-    ModifyInstanceAttribute: `changed ${r}'s security groups`,
-    ModifyDBInstance: `changed the database ${r}`, RebootDBInstance: `rebooted the database ${r}`, StopDBInstance: `stopped the database ${r}`,
+    ModifyInstanceAttribute: `changed ${r}'s security groups`, ModifyDBInstance: `changed the database ${r}`,
+    RebootDBInstance: `rebooted the database ${r}`, StopDBInstance: `stopped the database ${r}`,
   };
   return M[e] || `${e} on ${r}`;
 }
-async function refreshFeed() {
-  // the last day, newest first: an empty "last 3 hours" told visitors nothing
-  const data = await api("api/changes?minutes=1440");
-  $("feedTitle").textContent = sandboxMode ? "What changed in the sandbox" : "What changed in the account";
-  $("feedNote").textContent = sandboxMode ? "Changes the scenarios made to the synthetic estate." : "Live from CloudTrail and discovery. Changes made by hand show up here.";
-  $("feed").replaceChildren(...(data.changes.length ? data.changes.slice(0, 20).map(c =>
-    el("li", { class: c.by_agent ? "agent" : c.actor ? "human" : "" },
-      el("div", {}, el("span", { class: "t" }, (Date.now() / 1000 - c.at > 86000 ? fmtTime(c.at) : hhmmss(c.at)) + "  "), describe(c)),
-      el("div", { class: "who" }, "by " + who(c))))
-    : [el("li", { class: "meta" }, sandboxMode ? "Nothing yet. Run a scenario." : "No changes in the last 24 hours.")]));
+const ACTION = { restore_firewall_rule: "Restore firewall rule", revert_rule_edit: "Revert rule edit", reattach_security_group: "Re-attach security group",
+                 start_instance: "Start instance", restart_service: "Restart service" };
+const empty = (title, text) => el("div", { class: "empty" }, el("b", {}, title), text || "");
+function table(cols, rows, onRow) {
+  return el("div", { class: "tablewrap" }, el("table", {}, el("tr", {}, ...cols.map(c => el("th", {}, c))),
+    ...rows.map(r => el("tr", { class: onRow ? "click" : null, onclick: onRow ? (e) => { if (!e.target.closest("a")) onRow(r.data); } : null }, ...r.cells.map(c => el("td", {}, c))))));
 }
 
-/* ---------- incidents ---------- */
-const PILL = { open: "open", proposed: "open", approved: "good", executed: "good", resolved: "done", verified: "done",
-               failed: "bad", rejected: "bad", unhealthy: "bad", degraded: "warn", healthy: "good" };
-function st(s) { return el("span", { class: "pill " + (PILL[s] || "") }, s ?? "—"); }
-
-async function refreshList() {
-  const rows = await api("api/incidents");
-  $("incidents").replaceChildren(...(rows.length ? rows.map(r =>
-    el("li", { class: r.id === current ? "sel" : "", onclick: () => openIncident(r.id) },
-      el("div", { class: "row" }, el("span", { class: "id" }, r.id), st(r.status)),
-      el("div", { class: "meta", style: "font-size:13px" }, r.top ? nm(r.top) : "investigating…",
-         r.ttr_seconds != null ? ` · fixed in ${r.ttr_seconds}s` : "", el("br"), fmtTime(r.opened_at)))
-  ) : [el("li", { class: "none" }, "No incidents yet.")]));
+/* ---------- Overview ---------- */
+async function pOverview(page) {
+  setTitle("Overview");
+  const o = await api("overview");
+  const kpi = (label, val, foot, hot) => el("div", { class: "card kpi" + (hot ? " alert" : "") }, el("div", { class: "label" }, label), el("div", { class: "val" }, val), el("div", { class: "foot" }, foot));
+  const max = Math.max(1, ...o.daily.map(d => d.count));
+  const lbMax = Math.max(0.001, ...o.load_bearing.map(l => l.score));
+  page.replaceChildren(el("div", { class: "grid" },
+    el("div", { class: "grid g4" },
+      kpi("Open incidents", o.open, o.open ? "being handled" : "all clear", o.open),
+      kpi("Awaiting approval", o.awaiting_approval.length, o.awaiting_approval.length ? "fixes ready for an operator" : "nothing pending", o.awaiting_approval.length),
+      kpi("Median time to resolve", dur(o.median_ttr), `${o.resolved} resolved · ${o.failed} failed`),
+      kpi("Changes, last 24 h", o.changes_24h >= 50 ? "50+" : o.changes_24h, `${o.changes_by_people} made by people`)),
+    o.awaiting_approval.length ? el("div", { class: "card" }, el("h2", {}, "Awaiting approval"), el("p", { class: "sub" }, "Proposed fixes. Nothing runs until an operator approves."),
+      table(["Action", "Target", "Incident", "Proposed"], o.awaiting_approval.map(a => ({ data: a, cells: [el("span", { class: "strong" }, ACTION[a.kind] || a.kind), nm(a.target), el("span", { class: "idcell" }, a.incident), ago(a.proposed_at)] })),
+        (a) => location.hash = `#/incidents/${a.incident}`)) : null,
+    el("div", { class: "grid g32" },
+      el("div", { class: "card" }, el("h2", {}, "Recent incidents"),
+        o.recent.length ? table(["Incident", "Status", "Root cause", "Opened", "Resolved in"], o.recent.map(i => ({ data: i, cells: [el("span", { class: "idcell" }, i.id), st(i.status), i.top_name ? el("span", { class: "strong" }, i.top_name) : el("span", { class: "muted" }, "investigating…"), ago(i.opened_at), dur(i.ttr_seconds)] })),
+          (i) => location.hash = `#/incidents/${i.id}`) : empty("No incidents yet", S.env === "staging" ? "Use Simulate incident to run a drill." : "Alerts from Prometheus open incidents here automatically.")),
+      el("div", { class: "card" }, el("h2", {}, "Incidents, last 14 days"),
+        el("div", { class: "chart" }, ...o.daily.map(d => el("div", { title: `${new Date(d.day * 1000).toLocaleDateString()}: ${d.count}` },
+          el("span", { class: "b", style: `height:${d.count / max * 100}%` }), el("small", {}, new Date(d.day * 1000).toLocaleDateString([], { day: "numeric" }))))))),
+    el("div", { class: "grid g2" },
+      el("div", { class: "card" }, el("h2", {}, "Most load-bearing resources"), el("p", { class: "sub" }, "PageRank over the dependency graph: what most of the estate leans on."),
+        el("div", { class: "lb" }, ...o.load_bearing.flatMap(l => [el("a", { href: `#/topology/${encodeURIComponent(l.rid)}` }, l.name),
+          el("div", { class: "bar", title: String(l.score) }, el("span", { style: `width:${l.score / lbMax * 100}%` }))]))),
+      el("div", { class: "card" }, el("h2", {}, "Estate in the graph"), el("p", { class: "sub" }, S.env === "prod" ? "Kept current by discovery and CloudTrail." : "The simulated estate."),
+        el("div", { class: "grid g2", style: "gap:8px" }, ...Object.entries(o.estate).map(([k, n]) =>
+          el("div", { class: "row", style: "justify-content:space-between;padding:8px 12px;border-radius:8px;background:var(--wash)" }, el("span", { class: "muted" }, (KLABEL[k] || k.toLowerCase()) + "s"), el("span", { class: "strong" }, n))))))));
 }
 
-async function openIncident(id) {
-  current = id;
-  if (!graphCache) await loadGraph().catch(() => {});
-  render(await api(`api/incidents/${encodeURIComponent(id)}`));
-  refreshList();
+/* ---------- Incidents ---------- */
+let incFilter = "all";
+async function pIncidents(page) {
+  setTitle("Incidents");
+  const rows = await api("incidents?limit=200");
+  const shown = rows.filter(r => incFilter === "all" || r.status === incFilter);
+  const chip = (k, label) => el("button", { "aria-pressed": String(incFilter === k), onclick: () => { incFilter = k; route(); } }, `${label} (${k === "all" ? rows.length : rows.filter(r => r.status === k).length})`);
+  page.replaceChildren(el("div", { class: "card" },
+    el("div", { class: "chips", style: "margin-bottom:12px" }, chip("all", "All"), chip("open", "Open"), chip("resolved", "Resolved"), chip("failed", "Failed")),
+    shown.length ? table(["Incident", "Status", "Root cause", "Opened", "Resolved in"],
+      shown.map(r => ({ data: r, cells: [el("span", { class: "idcell" }, r.id), st(r.status),
+        r.top ? el("span", {}, el("span", { class: "strong" }, nm(r.top)), nm(r.top) !== r.top ? el("div", { class: "mono muted" }, r.top) : null) : el("span", { class: "muted" }, "investigating…"),
+        fmtTime(r.opened_at), dur(r.ttr_seconds)] })), (r) => location.hash = `#/incidents/${r.id}`)
+      : empty("No incidents", S.env === "staging" ? "Use Simulate incident to run a fault drill." : "When Prometheus alerts fire, rootgraph opens an incident here and starts investigating.")));
 }
-
-function renderSteps(inc) {
+const TABS = [["summary", "Summary"], ["timeline", "Timeline"], ["evidence", "Evidence"], ["graph", "Graph"], ["trace", "Agent trace"]];
+async function pIncident(page, parts, quiet) {
+  const id = parts[1], tab = parts[2] || "summary";
+  if (quiet && tab === "graph") return;   // don't rebuild the graph under the user's cursor
+  const inc = await api(`incidents/${encodeURIComponent(id)}`);
+  const rep = inc.report;
+  setTitle(id, [el("a", { href: "#/incidents" }, "Incidents"), ` · ${S.env === "prod" ? "Production" : "Staging"}`]);
+  const head = el("div", { class: "card" },
+    el("div", { class: "inc-head" }, el("span", { id: "incStatus" }, st(inc.status)),
+      el("span", { class: "muted" }, inc.ttr_seconds != null ? `Resolved in ${dur(inc.ttr_seconds)}` : `Opened ${fmtTime(inc.opened_at)}`),
+      rep ? el("span", { class: "muted" }, `· ${rep.alertnames.join(", ")} on `, ...rep.alerting.map((r, i) => [i ? ", " : "", el("span", { class: "strong" }, nm(r))])) : null),
+    steps(inc));
+  if (!rep) {
+    page.replaceChildren(head, el("div", { class: "cause-card", style: "margin-top:16px" }, el("p", { class: "eyebrow" }, "Investigating"),
+      el("p", { class: "cause" }, "Working on it…"), el("p", { class: "plain" }, "Walking the graph upward from the alerts, checking network paths, probes and recent changes; then the AI agent tests the ranking. Usually under a minute.")));
+    return;
+  }
+  const body = el("div", {});
+  page.replaceChildren(head, el("nav", { class: "tabs" }, ...TABS.map(([k, label]) => el("a", { href: `#/incidents/${id}/${k}`, class: k === tab ? "on" : null }, label))), body);
+  if (tab === "summary") summary(body, inc, rep);
+  else if (tab === "timeline") body.append(el("div", { class: "card" }, el("h2", {}, "What happened"), el("p", { class: "sub" }, "Every change in the account around the incident. The one that caused it is marked."), timeline(rep)));
+  else if (tab === "evidence") body.append(scorecard(rep));
+  else if (tab === "graph") graphTab(body, rep);
+  else if (tab === "trace") body.append(trace(rep));
+}
+function steps(inc) {
   const acts = inc.actions || [], has = (s) => acts.some(a => a.status === s);
   const k = !inc.report ? 1 : inc.status === "resolved" ? 5 : has("executed") || has("approved") ? 4 : acts.length ? 3 : 2;
-  const failed = inc.status === "failed" || (acts.length && acts.every(a => a.status === "failed" || a.status === "rejected"));
-  const names = ["Alerts", "Investigated", "Fix proposed", "Approved, running", "Verified"];
-  $("steps").replaceChildren(...names.map((n, i) => el("li", { class: i < k - 1 || (k === 5 && i === 4) ? "done" : i === k - 1 ? (failed ? "fail" : "now") : "" }, n)));
+  return el("ol", { class: "steps" }, ...["Alerts", "Investigated", "Fix proposed", "Approved, running", "Verified"].map((n, i) =>
+    el("li", { class: i < k - 1 || (k === 5 && i === 4) ? "done" : i === k - 1 ? (inc.status === "failed" ? "fail" : "now") : null }, n)));
 }
-
 function humanExplainer(by) {
   if (!by) return "";
   if (by.startsWith("template")) {
-    const why = /429|limit/i.test(by) ? "the free AI model's daily limit was reached" : /error/i.test(by) ? "the AI model didn't answer" : "no AI model configured";
-    return `Explained by the built-in template (${why}). The diagnosis above never depends on the AI.`;
+    const why = /429|limit/i.test(by) ? "the AI provider's daily limit was reached" : /error/i.test(by) ? "the AI model didn't answer" : "no AI model configured";
+    return `Explanation from the built-in template (${why}); the diagnosis never depends on the AI.`;
   }
   return `Explained and checked by ${by}`;
 }
-
 function plainSentence(rep) {
   const top = rep.top, row = rep.scorecard.find(r => r.rid === top);
   if (!top || !row) return "No single resource explains these alerts.";
-  const n = rep.alerting.length, ex = row.explains.length;
-  const bits = [];
-  const bp = (rep.broken_paths || []).find(b => (b.culprit_rules || []).length || (b.detached || []).length);
+  const bits = [], bp = (rep.broken_paths || []).find(b => (b.culprit_rules || []).length || (b.detached || []).length);
   if (bp && (bp.culprit_rules || []).length) {
     const r = bp.culprit_rules[0];
-    bits.push(String(r.rule_id || "").includes("@") ? `a firewall rule on ${nm(r.firewall)} was edited, so ${nm(bp.from)} can no longer reach ${nm(bp.to)}`
-                                                    : `a firewall rule on ${nm(r.firewall)} was removed, so ${nm(bp.from)} can no longer reach ${nm(bp.to)}`);
-  } else if (bp && bp.detached.length) bits.push(`a security group was detached from ${nm(bp.detached[0].target)}, so ${nm(bp.from)} can no longer reach ${nm(bp.to)}`);
+    bits.push(`a firewall rule on ${nm(r.firewall)} was ${String(r.rule_id || "").includes("@") ? "edited" : "removed"}, so ${nm(bp.from)} can no longer reach ${nm(bp.to)}`);
+  } else if (bp) bits.push(`a security group was detached from ${nm(bp.detached[0].target)}, so ${nm(bp.from)} can no longer reach ${nm(bp.to)}`);
   else if (row.probe === "unhealthy") bits.push(`${nm(top)} itself is down`);
   if (row.components.change_in_window && !bp) bits.push("it changed just before the alerts");
   if (row.components.prior_incident_match) bits.push("the same cause was fixed before");
-  return `${nm(top)} explains ${ex} of ${n} alerting resources` + (bits.length ? `: ${bits.join("; ")}.` : ".");
+  return `${nm(top)} explains ${row.explains.length} of ${rep.alerting.length} alerting resources` + (bits.length ? `: ${bits.join("; ")}.` : ".");
 }
-
-function render(inc) {
-  const rep = inc.report;
-  lastRep = rep;
-  $("placeholder").hidden = true; $("incident").hidden = false;
-  $("incId").textContent = inc.id;
-  $("incStatus").replaceChildren(st(inc.status));
-  $("incTtr").textContent = inc.ttr_seconds != null ? `fixed in ${inc.ttr_seconds}s` : `opened ${fmtTime(inc.opened_at)}`;
-  renderSteps(inc);
-  clearTimeout(pollTimer);
-  if (!rep) {
-    $("cause").textContent = "Investigating…"; $("causeRid").textContent = "";
-    $("plain").textContent = "Walking the graph, checking paths, probes and recent changes; then the AI checks the ranking. Up to a minute.";
-    $("explanation").textContent = ""; $("multi").hidden = true; $("whatCard").hidden = true;
-    $("explainedBy").textContent = ""; $("recall").textContent = ""; $("alerts").textContent = "";
-    $("proposals").replaceChildren(); $("scorecard").replaceChildren(); $("trace").replaceChildren(); $("traceChips").replaceChildren(); $("traceMore").replaceChildren();
-    pollTimer = setTimeout(() => { if (current === inc.id) openIncident(inc.id).catch(() => {}); }, 2500);
-    return;
-  }
-
-  $("alerts").replaceChildren(`${rep.alertnames.join(", ")} on `,
-    ...rep.alerting.map((r, i) => el("span", {}, el("b", {}, nm(r)), i < rep.alerting.length - 1 ? ", " : "")));
-
-  $("cause").textContent = rep.top ? nm(rep.top) : "No candidate";
-  $("causeRid").textContent = rep.top && nm(rep.top) !== rep.top ? rep.top : "";
-  $("plain").textContent = plainSentence(rep);
-  $("explanation").textContent = rep.explanation;
-  $("multi").hidden = !rep.multiple_causes;
-  if (rep.multiple_causes) $("multi").textContent = `Multiple likely causes: ${rep.scorecard.slice(0, 2).map(r => `${nm(r.rid)} (${r.score})`).join(" and ")}. One fix is proposed for each.`;
+function summary(body, inc, rep) {
   const u = rep.llm || {};
-  $("explainedBy").textContent = humanExplainer(rep.explained_by) +
-    (u.agent_calls ? ` · ${u.agent_calls} tool calls chosen by the AI` : "");
-  $("recall").textContent = rep.recalled.length ? `Seen before in ${rep.recalled.map(r => r["i.id"]).join(", ")}` : "";
-
-  renderTimeline(rep);
-  renderProposals(rep, inc.actions);
-  renderScorecard(rep);
-  renderTrace(rep);
-  renderGraph(rep);
+  const cause = el("div", { class: "cause-card" }, el("p", { class: "eyebrow" }, "Most likely root cause"),
+    el("p", { class: "cause" }, rep.top ? nm(rep.top) : "No candidate"),
+    el("p", { class: "rid" }, rep.top && nm(rep.top) !== rep.top ? `${rep.top} · ${KLABEL[S.kinds[rep.top]] || ""}` : KLABEL[S.kinds[rep.top]] || ""),
+    el("p", { class: "plain" }, plainSentence(rep)),
+    rep.multiple_causes ? el("p", { class: "multi" }, `Multiple likely causes: ${rep.scorecard.slice(0, 2).map(r => `${nm(r.rid)} (${r.score})`).join(" and ")}. One fix is proposed for each.`) : null,
+    el("details", {}, el("summary", {}, "Full reasoning"), el("p", {}, rep.explanation)),
+    el("div", { class: "foot" }, el("span", {}, humanExplainer(rep.explained_by) + (u.agent_calls ? ` · ${u.agent_calls} tool calls chosen by the AI` : "")),
+      rep.recalled.length ? el("span", {}, "Seen before: ", ...rep.recalled.map((r, i) => [i ? ", " : "", el("a", { href: `#/incidents/${r["i.id"]}` }, r["i.id"])])) : null));
+  body.append(el("div", { class: "grid g32" }, el("div", { class: "grid", style: "align-content:start" }, cause, fixes(rep, inc.actions)),
+    el("div", { class: "card", style: "align-self:start" }, el("h2", {}, "What happened"), el("p", { class: "sub" }, "The change that caused it is marked."), timeline(rep))));
 }
-
-function renderTimeline(rep) {
+const WHY = { restore_firewall_rule: "Put back the exact rule that was removed.", revert_rule_edit: "Edit the rule back to what it was before.",
+              reattach_security_group: "Re-attach the security group that was detached.", start_instance: "Start the instance that was stopped; its services come back on their own.",
+              restart_service: "Start the stopped service." };
+function fixes(rep, acts) {
+  const byId = Object.fromEntries(acts.map(a => [a.id, a]));
+  return el("div", { class: "card" }, el("h2", {}, "Proposed fix"), el("p", { class: "sub" }, "The exact undo of the change, with its blast radius and rollback."),
+    ...rep.proposals.map(p => {
+      if (!p.action) return el("div", { class: "action" }, el("h3", {}, `No fix proposed for ${nm(p.rid)}`), el("p", { class: "muted" }, p.reason));
+      const a = p.action, live = byId[a.id] || a, pr = a.params || {}, kv = el("dl", { class: "kv" });
+      const add = (k, v) => { if (v != null && v !== "" && !(Array.isArray(v) && !v.length)) kv.append(el("dt", {}, k), el("dd", {}, v)); };
+      const list = (xs) => (xs || []).map(nm).join(", ") || "none";
+      if (a.kind === "restore_firewall_rule") { add("Rule", `${pr.rule.proto} ${pr.rule.port_from}–${pr.rule.port_to} from ${nm(pr.rule.source)}`); add("Gains access", nm(pr.gains_access)); }
+      else if (a.kind === "revert_rule_edit") { add("Now", pr.now); add("Back to", pr.before); }
+      else if (a.kind === "reattach_security_group") { add("Re-attach", `${nm(pr.firewall)} to ${nm(pr.target)}`); add("Groups after", list(pr.groups_after)); }
+      else if (a.kind === "start_instance") { add("Instance", `${nm(pr.instance)} (now ${pr.state})`); add("Blast radius", list(pr.blast_radius)); }
+      else { add("Command", el("code", {}, pr.command)); add("Host", pr.host ? nm(pr.host) : null); add("Blast radius", list(pr.blast_radius)); }
+      add("Verifies", pr.verify_path ? pr.verify_path.map(nm).join(" → ") + " is reachable again" : null);
+      add("Rollback", pr.rollback);
+      if (pr.aws_cli) add("AWS CLI", el("code", {}, pr.aws_cli));
+      if (p.prefilled_from) add("Memory", el("span", {}, "the same fix resolved ", el("a", { href: `#/incidents/${p.prefilled_from.incident}` }, p.prefilled_from.incident), ` in ${dur(p.prefilled_from.ttr_seconds)}`));
+      if (live.approved_by) add("Approved by", live.approved_by);
+      if (live.detail) add("Result", live.detail);
+      const btns = el("div", { class: "row" });
+      if (live.status === "proposed") {
+        if (isOp()) btns.append(el("button", { class: "primary", onclick: (e) => decide(e, a, "approve", pr) }, "Approve and execute"),
+                                el("button", { class: "ghost", onclick: (e) => decide(e, a, "reject", pr) }, "Reject"), el("span", { class: "as" }, `as ${S.user.name}`));
+        else btns.append(el("span", { class: "as" }, "An operator must approve this fix. You have view access."));
+      }
+      return el("div", { class: "action" }, el("div", { class: "row" }, el("h3", {}, ACTION[a.kind] || a.kind), el("span", { class: "muted" }, "on " + nm(a.target_rid)), st(live.status)),
+        el("p", { class: "why" }, WHY[a.kind] || ""), kv, btns);
+    }));
+}
+async function decide(e, a, verb, pr) {
+  const btn = e.currentTarget;
+  const ok = verb === "approve"
+    ? await modal(`Approve: ${ACTION[a.kind] || a.kind}?`, [el("p", {}, `On ${nm(a.target_rid)}${S.env === "prod" ? ", in the real AWS account" : " (staging: graph only)"}. Recorded as approved by ${S.user.name}.`),
+        pr.aws_cli ? el("pre", {}, pr.aws_cli) : pr.command ? el("pre", {}, pr.command) : null, pr.rollback ? el("p", { class: "small muted" }, `Rollback: ${pr.rollback}`) : null], "Approve and execute")
+    : await modal("Reject this fix?", el("p", {}, "Nothing will run. The incident stays open."), "Reject");
+  if (!ok) return;
+  btn.disabled = true;
+  try { const r = await post(`actions/${a.id}/${verb}`); toast(verb === "approve" ? (r.verify?.verified ? "Executed and verified." : r.verify?.detail || "Executed.") : "Rejected."); }
+  catch (x) { toast(x.message, true); }
+  route();
+}
+function timeline(rep) {
   const tl = rep.timeline || [];
-  // the changes that touch the root cause or a firewall on a broken path are candidates; the latest human one is the cause,
-  // plus the CloudTrail call behind it (discovery sees the same change a poll or two later)
+  if (!tl.length) return empty("No changes recorded", "Nothing changed in the account in the 30 minutes before the alerts.");
+  // the latest human change on the root cause (or a firewall on a broken path) is the cause, plus the CloudTrail call behind it
   const hot = new Set([rep.top, ...(rep.broken_paths || []).flatMap(b => [...(b.culprit_rules || []).map(c => c.firewall), ...(b.detached || []).map(d => d.firewall)])].filter(Boolean));
   const onHot = tl.filter(e => e.kind === "change" && !e.by_agent && (e.resources || []).some(r => hot.has(r)));
   const last = onHot[onHot.length - 1];
   const twin = last && last.source !== "cloudtrail" ? onHot.filter(e => e.source === "cloudtrail" && e.at <= last.at && last.at - e.at <= 300).pop() : null;
   const isCause = (e) => e === last || e === twin;
-  $("whatCard").hidden = !tl.length;
-  $("timeline").replaceChildren(...tl.map(e => el("li", { class: "k" + e.kind + (e.kind === "change" ? (isCause(e) ? " cause" : " ctx") : "") },
-    el("span", { class: "t" }, hhmmss(e.at)), el("span", { class: "dot" }),
-    el("span", { class: "txt" }, e.kind === "change" ? said(e) : e.kind === "alerts" ? `${e.event}: ${(e.names || []).join(", ")}` : e.event.replace(/root cause: (.*)/, (_, r) => `rootgraph: root cause is ${nm(r)}`),
-       isCause(e) ? el("span", { class: "tag-cause" }, "the cause") : null))));
+  return el("ol", { class: "timeline" }, ...tl.map(e => el("li", { class: "k" + e.kind + (e.kind === "change" ? (isCause(e) ? " cause" : " ctx") : "") },
+    el("span", { class: "t" }, hhmmss(e.at)), el("span", { class: "d" }),
+    el("span", { class: "x" }, e.kind === "change" ? (e.source === "graph_diff" && !e.actor ? `discovery saw: ${describe(e)}` : `${who(e)} ${describe(e)}`)
+      : e.kind === "alerts" ? `${e.event}: ${(e.names || []).join(", ")}` : e.event.replace(/root cause: (.*)/, (_, r) => `rootgraph: root cause is ${nm(r)}`),
+      isCause(e) ? el("span", { class: "tag-cause" }, "the cause") : null))));
 }
-
-const WHY = {
-  restore_firewall_rule: "Put back the exact rule that was removed.",
-  revert_rule_edit: "Edit the rule back to what it was before.",
-  reattach_security_group: "Re-attach the security group that was detached.",
-  start_instance: "Start the instance that was stopped; its services come back on their own.",
-  restart_service: "Start the stopped service.",
-};
-function renderProposals(rep, acts) {
-  const byId = Object.fromEntries(acts.map(a => [a.id, a]));
-  $("proposals").replaceChildren(...rep.proposals.map(p => {
-    if (!p.action) return el("div", { class: "action" }, el("h3", {}, `No fix proposed for ${nm(p.rid)}`), el("p", { class: "meta" }, p.reason));
-    const a = p.action, live = byId[a.id] || a, pr = a.params || {}, kv = el("dl", { class: "kv" });
-    const add = (k, v) => { if (v != null && v !== "" && !(Array.isArray(v) && !v.length)) kv.append(el("dt", {}, k), el("dd", {}, v)); };
-    const list = (xs) => (xs || []).map(nm).join(", ") || "none";
-    if (a.kind === "restore_firewall_rule") {
-      add("Rule", `${pr.rule.proto} ${pr.rule.port_from}–${pr.rule.port_to} from ${nm(pr.rule.source)}`);
-      add("Gains access", nm(pr.gains_access));
-    } else if (a.kind === "revert_rule_edit") {
-      add("Now", pr.now); add("Back to", pr.before);
-    } else if (a.kind === "reattach_security_group") {
-      add("Re-attach", `${nm(pr.firewall)} to ${nm(pr.target)}`); add("Groups after", list(pr.groups_after));
-    } else if (a.kind === "start_instance") {
-      add("Instance", `${nm(pr.instance)} (now ${pr.state})`); add("Blast radius", list(pr.blast_radius));
-    } else {
-      add("Command", el("code", {}, pr.command)); add("Host", pr.host ? nm(pr.host) : null); add("Blast radius", list(pr.blast_radius));
-    }
-    add("Verifies", pr.verify_path ? pr.verify_path.map(nm).join(" → ") + " is reachable again" : null);
-    add("Rollback", pr.rollback);
-    if (pr.aws_cli) add("AWS CLI", el("code", {}, pr.aws_cli));
-    if (p.prefilled_from) add("Memory", `the same fix resolved ${p.prefilled_from.incident} in ${p.prefilled_from.ttr_seconds}s`);
-    if (live.approved_by) add("Approved by", live.approved_by);
-    if (live.detail) add("Result", live.detail);
-    const buttons = el("div", { class: "row" });
-    if (live.status === "proposed") buttons.append(
-      el("button", { class: "primary", onclick: (e) => act(e, a.id, "approve") }, "Approve and execute"),
-      el("button", { class: "outline", onclick: (e) => act(e, a.id, "reject") }, "Reject"));
-    return el("div", { class: "action" },
-      el("div", { class: "row" }, el("h3", {}, a.kind.replaceAll("_", " ")), el("span", { class: "meta" }, "on " + nm(a.target_rid)), st(live.status)),
-      el("p", { class: "why" }, WHY[a.kind] || ""), kv, buttons);
-  }));
-}
-
-async function act(e, id, verb) {
-  e.currentTarget.disabled = true;
-  const actor = $("actor").value.trim(); store.set("rootgraph.actor", actor);
-  try { await api(`api/actions/${id}/${verb}`, { method: "POST", body: JSON.stringify({ actor }) }); }
-  catch (err) { alert(err.message); }
-  await openIncident(current);
-}
-
-function renderScorecard(rep) {
-  const head = el("tr", {}, ...["#", "Candidate", "Score", "Covers", "Probe", "Broken path", "Changed", "Memory", "Hops"].map(h => el("th", {}, h)));
+function scorecard(rep) {
   const max = Math.max(1, ...rep.scorecard.map(r => r.score));
-  const rows = rep.scorecard.flatMap(r => [
-    el("tr", { class: "main" + (r.rank === 1 ? " top" : "") },
-      el("td", {}, r.rank),
-      el("td", { class: "cand" }, el("b", {}, nm(r.rid)), nm(r.rid) !== r.rid ? el("code", {}, r.rid) : null),
-      el("td", { class: "num" }, r.score, el("div", { class: "bar" }, el("span", { style: `width:${Math.max(0, r.score) / max * 100}%` }))),
-      el("td", { class: "num" }, `${r.explains.length}/${rep.alerting.length}`), el("td", {}, st(r.probe)),
-      el("td", {}, r.components.broken_path ? "yes" : ""), el("td", {}, r.components.change_in_window ? "yes" : ""),
-      el("td", {}, r.components.prior_incident_match ? "yes" : ""), el("td", { class: "num" }, r.components.min_hops)),
-    el("tr", { class: "ev" }, el("td", {}), el("td", { colspan: "8" }, r.evidence.join("; ")))]);
-  $("scorecard").replaceChildren(head, ...rows);
+  return el("div", { class: "card" }, el("h2", {}, "Scorecard"), el("p", { class: "sub" }, "Every candidate the graph surfaced, scored on evidence. The node most alerts lead to is not always the guilty one."),
+    el("div", { class: "tablewrap" }, el("table", {}, el("tr", {}, ...["#", "Candidate", "Score", "Covers", "Probe", "Broken path", "Changed", "Memory", "Hops"].map(h => el("th", {}, h))),
+      ...rep.scorecard.flatMap(r => [
+        el("tr", { class: r.rank === 1 ? "lead" : null }, el("td", {}, r.rank),
+          el("td", {}, el("span", { class: "strong" }, nm(r.rid)), nm(r.rid) !== r.rid ? el("div", { class: "mono muted" }, r.rid) : null),
+          el("td", { class: "num" }, r.score, el("div", { class: "bar" }, el("span", { style: `width:${Math.max(0, r.score) / max * 100}%` }))),
+          el("td", { class: "num" }, `${r.explains.length}/${rep.alerting.length}`), el("td", {}, st(r.probe)),
+          el("td", {}, r.components.broken_path ? "yes" : ""), el("td", {}, r.components.change_in_window ? "yes" : ""),
+          el("td", {}, r.components.prior_incident_match ? "yes" : ""), el("td", { class: "num" }, r.components.min_hops)),
+        el("tr", {}, el("td", {}), el("td", { colspan: "8", class: "muted small", style: "padding-top:0" }, r.evidence.join("; ")))]))),
+    el("p", { class: "small muted", style: "margin:12px 0 0" }, "score = 3·coverage + 2·unhealthy − 2·healthy + 2·broken path + 2·change + 1·memory − 0.25·hops"));
 }
-
-function renderTrace(rep) {
-  const all = rep.trace.map((t, i) => ({ ...t, n: i + 1 }));
-  const counts = { all: all.length, agent: all.filter(t => t.by === "agent").length, gap: all.filter(t => t.outcome === "not_in_graph" || t.outcome === "error").length };
-  const chip = (key, label) => el("button", { "aria-pressed": String(traceFilter === key), onclick: () => { traceFilter = key; traceAll = false; renderTrace(rep); } }, `${label} (${counts[key]})`);
-  $("traceChips").replaceChildren(chip("all", "All steps"), chip("agent", "Chosen by the AI"), chip("gap", "Not in graph / errors"));
-  const shown = all.filter(t => traceFilter === "all" || (traceFilter === "agent" ? t.by === "agent" : t.outcome === "not_in_graph" || t.outcome === "error"));
-  const visible = traceAll ? shown : shown.slice(0, 8);
-  const head = el("tr", {}, ...["#", "By", "Tool", "Arguments", "Outcome", "ms"].map(h => el("th", {}, h)));
-  const rows = visible.map(t => {
-    const detail = el("details", {}, el("summary", {}, el("code", {}, t.tool)),
-      t.cypher ? el("pre", {}, t.cypher) : null,
-      t.tool === "probe" && t.rows[0]?.promql?.length ? el("pre", {}, t.rows[0].promql.join("\n")) : null,
-      el("pre", {}, JSON.stringify(t.rows, null, 1)));
-    return el("tr", {}, el("td", {}, t.n),
-      el("td", {}, el("span", { class: "pill " + (t.by === "agent" ? "agent" : "") }, t.by === "agent" ? "agent-chosen" : "pipeline")),
-      el("td", {}, detail, t.reason ? el("div", { class: "meta", style: "font-size:13px;margin-top:4px" }, `Reason: ${t.reason}`) : null),
-      el("td", {}, el("code", {}, JSON.stringify(t.args))),
-      el("td", {}, el("span", { class: "pill " + (t.outcome === "error" ? "bad" : t.outcome === "not_in_graph" ? "warn" : "good") }, t.outcome.replaceAll("_", " "))),
-      el("td", { class: "num" }, t.ms));
-  });
-  $("trace").replaceChildren(head, ...(rows.length ? rows : [el("tr", {}, el("td", { colspan: "6", class: "meta" },
-    traceFilter === "agent" ? "The AI made no calls on this incident (it may have been unavailable)." : "None."))]));
-  $("traceMore").replaceChildren(shown.length > 8 ? el("button", { class: "outline small", onclick: () => { traceAll = !traceAll; renderTrace(rep); } },
-    traceAll ? "Show fewer" : `Show all ${shown.length} steps`) : "");
+function trace(rep) {
+  const card = el("div", { class: "card" });
+  const draw = () => {
+    const all = rep.trace.map((t, i) => ({ ...t, n: i + 1 })), f = S.traceFilter, gap = (t) => t.outcome === "not_in_graph" || t.outcome === "error";
+    const shown = all.filter(t => f === "all" || (f === "agent" ? t.by === "agent" : gap(t)));
+    const vis = S.traceAll ? shown : shown.slice(0, 12);
+    const chip = (k, label, n) => el("button", { "aria-pressed": String(f === k), onclick: () => { S.traceFilter = k; S.traceAll = false; draw(); } }, `${label} (${n})`);
+    card.replaceChildren(el("h2", {}, "Agent trace"),
+      el("p", { class: "sub" }, "Every step is a fixed, reviewed Cypher or PromQL query. The AI chooses tools and must give a reason; it never writes queries."),
+      el("div", { class: "chips", style: "margin-bottom:10px" }, chip("all", "All steps", all.length), chip("agent", "Chosen by the AI", all.filter(t => t.by === "agent").length), chip("gap", "Not in graph / errors", all.filter(gap).length)),
+      el("div", { class: "tablewrap" }, el("table", {}, el("tr", {}, ...["#", "By", "Tool", "Arguments", "Outcome", "ms"].map(h => el("th", {}, h))),
+        ...(vis.length ? vis.map(t => el("tr", {}, el("td", {}, t.n),
+          el("td", {}, el("span", { class: "pill " + (t.by === "agent" ? "agent" : "") }, t.by === "agent" ? "AI agent" : "pipeline")),
+          el("td", {}, el("details", {}, el("summary", {}, el("code", {}, t.tool)), t.cypher ? el("pre", {}, t.cypher) : null,
+              t.tool === "probe" && t.rows[0]?.promql?.length ? el("pre", {}, t.rows[0].promql.join("\n")) : null, el("pre", {}, JSON.stringify(t.rows, null, 1))),
+            t.reason ? el("div", { class: "muted small", style: "margin-top:4px" }, `Reason: ${t.reason}`) : null),
+          el("td", {}, el("code", { style: "overflow-wrap:anywhere;color:var(--mist)" }, JSON.stringify(t.args))),
+          el("td", {}, el("span", { class: "pill " + (t.outcome === "error" ? "bad" : t.outcome === "not_in_graph" ? "warn" : "good") }, t.outcome.replaceAll("_", " "))),
+          el("td", { class: "num" }, t.ms)))
+          : [el("tr", {}, el("td", { colspan: "6" }, empty(f === "agent" ? "The AI made no calls on this incident" : "None", f === "agent" ? "It may have been unavailable; the pipeline's own steps still ran." : "")))]))),
+      shown.length > 12 ? el("button", { style: "margin-top:12px", onclick: () => { S.traceAll = !S.traceAll; draw(); } }, S.traceAll ? "Show fewer" : `Show all ${shown.length} steps`) : null);
+  };
+  draw(); return card;
 }
 
 /* ---------- graph ---------- */
 const COLUMN = { Service: 0, Compute: 1, Firewall: 2, Database: 3 };
-const kindOf = (kinds) => ["Service", "Compute", "Database", "Firewall", "Network", "Internet", "CidrBlock"].find(k => kinds.includes(k)) || "Resource";
-const C = { ice: "#d8ecf8", frost: "#d1e4fa", mist: "#c7d3ea", fog: "#9da7ba", steel: "#2f343e", node: "#0d1020", violet: "#663af3", ember: "#e46d4c", amber: "#f1cf86" };
-
-async function renderGraph(rep) {
-  const data = graphCache && !rep.__fresh ? graphCache : await loadGraph();
-  const culprits = new Set((rep.broken_paths || []).flatMap(b => (b.culprit_rules || []).map(r => r.rule_id)));
-  const broken = new Set(rep.broken_paths.map(b => `${b.from}|${b.to}`));
-  const ranks = Object.fromEntries(rep.scorecard.map(r => [r.rid, r]));
-  const alerting = new Set(rep.alerting);
-  // focused view: the incident's resources and the firewalls and hosts between them
+const C = { ice: "#d8ecf8", mist: "#c7d3ea", fog: "#9da7ba", node: "#0d1020", violet: "#663af3", ember: "#e46d4c", amber: "#f1cf86" };
+function drawGraph(container, { rep = null, focus = false, selected = null, onTap = null } = {}) {
+  const data = S.graph; if (!data) return null;
+  const bps = (rep && rep.broken_paths) || [];
+  const culprits = new Set(bps.flatMap(b => (b.culprit_rules || []).map(r => r.rule_id)));
+  const broken = new Set(bps.map(b => `${b.from}|${b.to}`));
+  const ranks = rep ? Object.fromEntries(rep.scorecard.map(r => [r.rid, r])) : {};
+  const alerting = new Set(rep ? rep.alerting : []);
   let keep = null;
-  if (graphView === "focus") {
-    keep = new Set([...rep.alerting, ...rep.scorecard.map(r => r.rid), ...(rep.broken_paths || []).flatMap(b => [b.from, b.to, ...(b.firewalls || [])])]);
+  if (rep && focus) {
+    keep = new Set([...rep.alerting, ...rep.scorecard.map(r => r.rid), ...bps.flatMap(b => [b.from, b.to, ...(b.firewalls || [])])]);
     for (const e of data.edges) if (e.type === "RUNS_ON" && keep.has(e.source)) keep.add(e.target);      // service -> its host
     for (const e of data.edges) if (e.type === "PROTECTS" && keep.has(e.target)) keep.add(e.source);     // firewalls on kept hosts/dbs
   }
-  const vis = data.nodes.filter(n => !keep || keep.has(n.rid));
-  const ids = new Set(vis.map(n => n.rid)), counts = {};
-  const nodes = vis.map(n => {
-    const kind = kindOf(n.kinds), col = COLUMN[kind] ?? 4;
-    const y = (counts[col] = (counts[col] ?? -1) + 1);
-    const dx = kind === "Firewall" ? (y % 2) * 70 : 0;
-    return { data: { id: n.rid, label: n.name || n.rid, kind }, position: { x: col * 230 + dx, y: y * 84 } };
-  });
+  const vis = data.nodes.filter(n => !keep || keep.has(n.rid)), ids = new Set(vis.map(n => n.rid)), counts = {};
+  const nodes = vis.map(n => { const kind = kindOf(n.kinds), col = COLUMN[kind] ?? 4, y = (counts[col] = (counts[col] ?? -1) + 1);
+    return { data: { id: n.rid, label: n.name || n.rid, kind }, position: { x: col * 230 + (kind === "Firewall" ? (y % 2) * 70 : 0), y: y * 84 } }; });
   const edges = data.edges.filter(e => ids.has(e.source) && ids.has(e.target))
-    // removed rules pile up over many runs: draw only the one this incident blames
-    .filter(e => !(e.type === "ALLOWS_FROM" && e.active === false && !culprits.has(e.rule_id)))
-    .map((e, i) => ({ data: {
-      id: "e" + i, source: e.source, target: e.target,
-      cls: e.type === "ALLOWS_FROM" ? (e.active === false ? "removed" : "allow")
-         : e.type === "DEPENDS_ON" ? (broken.has(`${e.source}|${e.target}`) ? "broken" : "dep") : "infra",
+    .filter(e => !(e.type === "ALLOWS_FROM" && e.active === false && !culprits.has(e.rule_id)))   // removed rules pile up: draw only the blamed one
+    .map((e, i) => ({ data: { id: "e" + i, source: e.source, target: e.target,
+      cls: e.type === "ALLOWS_FROM" ? (e.active === false ? "removed" : "allow") : e.type === "DEPENDS_ON" ? (broken.has(`${e.source}|${e.target}`) ? "broken" : "dep") : "infra",
       label: e.type === "ALLOWS_FROM" && e.active === false ? `rule :${e.port_from} gone` : "" } }));
-  if (cy) cy.destroy();
-  cy = cytoscape({
-    container: $("cy"), elements: [...nodes, ...edges], layout: { name: "preset", padding: 30 }, wheelSensitivity: 0.2,
+  if (S.cy) S.cy.destroy();
+  const cy = S.cy = cytoscape({ container, elements: [...nodes, ...edges], layout: { name: "preset", padding: 30 }, wheelSensitivity: 0.2,
     style: [
-      { selector: "node", style: { "label": "data(label)", "font-family": "Inter, system-ui, sans-serif", "font-size": 12, "color": C.mist,
-          "text-valign": "bottom", "text-margin-y": 6, "background-color": C.node, "border-width": 1, "border-color": "#3f4959", "width": 26, "height": 26,
-          "text-outline-color": "#05060f", "text-outline-width": 2 } },
+      { selector: "node", style: { "label": "data(label)", "font-family": "Inter, system-ui, sans-serif", "font-size": 12, "color": C.mist, "text-valign": "bottom", "text-margin-y": 6,
+          "background-color": C.node, "border-width": 1, "border-color": "#3f4959", "width": 26, "height": 26, "text-outline-color": "#05060f", "text-outline-width": 2 } },
       { selector: "node[kind = 'Firewall']", style: { "shape": "round-rectangle" } },
       { selector: "node[kind = 'Database']", style: { "shape": "barrel", "width": 30 } },
       { selector: "node[kind = 'Compute']", style: { "shape": "round-rectangle", "width": 32 } },
       { selector: "node.alerting", style: { "border-width": 2.5, "border-color": C.amber } },
-      { selector: "node.top", style: { "background-color": C.violet, "border-width": 0, "width": 38, "height": 38, "color": C.ice, "font-weight": 600,
-          "underlay-color": C.violet, "underlay-opacity": .35, "underlay-padding": 10, "underlay-shape": "ellipse" } },
+      { selector: "node.top", style: { "background-color": C.violet, "border-width": 0, "width": 38, "height": 38, "color": C.ice, "underlay-color": C.violet, "underlay-opacity": .35, "underlay-padding": 10, "underlay-shape": "ellipse" } },
       { selector: "node.ranked", style: { "label": (n) => `${n.data("label")}  #${ranks[n.id()].rank}` } },
-      { selector: "node:selected", style: { "border-width": 3, "border-color": C.ice } },
-      { selector: "edge", style: { "width": 1.2, "curve-style": "bezier", "target-arrow-shape": "triangle", "arrow-scale": .7,
-          "line-color": C.fog, "target-arrow-color": C.fog, "opacity": .45, "font-size": 10, "label": "data(label)",
-          "color": "#fff", "text-background-color": C.ember, "text-background-opacity": 1, "text-background-padding": 3, "text-background-shape": "roundrectangle" } },
+      { selector: "node.blast", style: { "background-color": "#3a1d16", "border-color": C.ember, "border-width": 2 } },
+      { selector: "node.sel", style: { "border-width": 3, "border-color": C.ice, "background-color": C.violet } },
+      { selector: "edge", style: { "width": 1.2, "curve-style": "bezier", "target-arrow-shape": "triangle", "arrow-scale": .7, "line-color": C.fog, "target-arrow-color": C.fog, "opacity": .45,
+          "font-size": 10, "label": "data(label)", "color": "#fff", "text-background-color": C.ember, "text-background-opacity": 1, "text-background-padding": 3, "text-background-shape": "roundrectangle" } },
       { selector: "edge[cls = 'dep']", style: { "line-color": C.mist, "target-arrow-color": C.mist, "opacity": .7, "width": 1.6 } },
       { selector: "edge[cls = 'infra']", style: { "line-style": "dashed", "opacity": .35 } },
       { selector: "edge[cls = 'allow']", style: { "line-style": "dotted", "opacity": .35 } },
       { selector: "edge[cls = 'broken'], edge[cls = 'removed']", style: { "line-color": C.ember, "target-arrow-color": C.ember, "opacity": 1, "width": 3 } },
       { selector: "edge[cls = 'removed']", style: { "line-style": "dashed" } },
-    ],
-  });
-  cy.nodes().forEach(n => {
-    if (alerting.has(n.id())) n.addClass("alerting");
-    if (n.id() === rep.top) n.addClass("top");
-    if (ranks[n.id()]) n.addClass("ranked");
-  });
-  cy.on("tap", "node", (ev) => {
-    const id = ev.target.id(), r = ranks[id];
-    $("nodeinfo").replaceChildren(el("b", {}, nm(id)), ` (${KINDS[id] || "resource"}${nm(id) !== id ? ", " + id : ""})`,
-      r ? ` · rank #${r.rank}, score ${r.score}: ${r.evidence.join("; ") || "no evidence"}` : alerting.has(id) ? " · alerting" : " · not a candidate");
-  });
+    ] });
+  cy.nodes().forEach(n => { if (alerting.has(n.id())) n.addClass("alerting"); if (rep && n.id() === rep.top) n.addClass("top"); if (ranks[n.id()]) n.addClass("ranked"); if (n.id() === selected) n.addClass("sel"); });
+  if (onTap) cy.on("tap", "node", (ev) => onTap(ev.target.id()));
   cy.fit(undefined, 30);
+  return cy;
 }
-$("viewFocus").addEventListener("click", () => { graphView = "focus"; $("viewFocus").setAttribute("aria-pressed", "true"); $("viewAll").setAttribute("aria-pressed", "false"); if (lastRep) renderGraph(lastRep); });
-$("viewAll").addEventListener("click", () => { graphView = "all"; $("viewAll").setAttribute("aria-pressed", "true"); $("viewFocus").setAttribute("aria-pressed", "false"); if (lastRep) renderGraph(lastRep); });
+function graphTab(body, rep) {
+  const box = el("div", { class: "cyb" }), info = el("p", { class: "small muted", style: "margin:10px 0 0" }, "Click a node to see why it was or wasn't blamed.");
+  const seg = (k, label) => el("button", { "aria-pressed": String(S.graphView === k), onclick: () => { S.graphView = k; body.replaceChildren(); graphTab(body, rep); } }, label);
+  body.append(el("div", { class: "card" }, el("div", { class: "row", style: "margin-bottom:12px" }, el("h2", { style: "margin:0" }, "Graph evidence"), el("span", { class: "spacer" }),
+    el("div", { class: "chips" }, seg("focus", "This incident"), seg("all", "Whole estate"))), box, info,
+    el("div", { class: "legend" }, el("span", {}, el("i"), "depends on"), el("span", {}, el("i", { style: "border-top:1.5px dashed var(--fog)" }), "runs on · protects"),
+      el("span", {}, el("i", { style: "border-top:3px solid var(--ember)" }), "broken path · culprit rule"), el("span", {}, el("b", { style: "box-shadow:inset 0 0 0 2px #f1cf86" }), "alerting"),
+      el("span", {}, el("b", { style: "background:var(--violet);box-shadow:0 0 8px var(--violet)" }), "root cause"))));
+  const ranks = Object.fromEntries(rep.scorecard.map(r => [r.rid, r]));
+  drawGraph(box, { rep, focus: S.graphView === "focus", onTap: (id) => { const r = ranks[id];
+    info.replaceChildren(el("span", { class: "strong" }, nm(id)), ` (${KLABEL[S.kinds[id]] || "resource"}) `,
+      r ? `· rank #${r.rank}, score ${r.score}: ${r.evidence.join("; ") || "no evidence"} ` : rep.alerting.includes(id) ? "· alerting " : "· not a candidate ",
+      el("a", { href: `#/topology/${encodeURIComponent(id)}` }, "Open in Topology →")); } });
+}
 
-/* ---------- wiring ---------- */
-$("heroGo").addEventListener("click", () => sandboxMode ? inject("s1") : $("app").scrollIntoView({ behavior: "smooth" }));
-$("placeholderGo").addEventListener("click", (e) => inject("s1", e.currentTarget));
-$("resetBtn").addEventListener("click", async () => {
-  if (!confirm("Reset the sandbox? This deletes all incidents and memory.")) return;
-  try { await api("api/sandbox/reset", { method: "POST" }); current = null; $("incident").hidden = true; $("placeholder").hidden = false; await refreshList(); refreshFeed().catch(() => {}); }
-  catch (err) { alert(err.message); }
-});
-$("actor").value = store.get("rootgraph.actor") || "";
-$("token").value = store.get("rootgraph.token") || "";
-$("token").addEventListener("change", (e) => { store.set("rootgraph.token", e.target.value.trim()); refreshList().catch(() => {}); refreshFeed().catch(() => {}); });
+/* ---------- Changes ---------- */
+let chFilter = "all", chWindow = 1440;
+async function pChanges(page) {
+  setTitle("Changes");
+  const d = await api(`changes?minutes=${chWindow}&limit=200`);
+  const cat = (c) => c.by_agent ? "rootgraph" : c.actor ? "people" : "discovery";
+  const shown = d.changes.filter(c => chFilter === "all" || cat(c) === chFilter);
+  const chip = (k, label) => el("button", { "aria-pressed": String(chFilter === k), onclick: () => { chFilter = k; route(); } }, `${label} (${k === "all" ? d.changes.length : d.changes.filter(c => cat(c) === k).length})`);
+  const win = el("select", { "aria-label": "Time window", style: "width:auto", onchange: (e) => { chWindow = +e.target.value; route(); } },
+    ...[[60, "Last hour"], [1440, "Last 24 hours"], [10080, "Last 7 days"]].map(([v, l]) => el("option", { value: v, selected: v === chWindow ? "" : null }, l)));
+  page.replaceChildren(el("div", { class: "card" },
+    el("p", { class: "sub" }, S.env === "prod" ? "Every change to the AWS account: CloudTrail says who did it, discovery's graph diff says what actually changed. Changes made by hand in the console appear within a minute or two." : "Changes the drills made to the simulated estate."),
+    el("div", { class: "row", style: "margin-bottom:12px" }, el("div", { class: "chips" }, chip("all", "All"), chip("people", "People"), chip("rootgraph", "rootgraph"), chip("discovery", "Discovery")), el("span", { class: "spacer" }), win),
+    shown.length ? table(["Time", "Change", "By", "Source"], shown.map(c => ({ data: c, cells: [el("span", { class: "mono muted" }, chWindow > 1440 ? fmtTime(c.at) : hhmmss(c.at)),
+      el("span", {}, describe(c), (c.resources || []).length ? el("div", {}, ...c.resources.map((r, i) => [i ? " · " : "", el("a", { class: "small", href: `#/topology/${encodeURIComponent(r)}` }, nm(r))])) : null),
+      whoPill(c), el("span", { class: "muted small" }, c.source === "cloudtrail" ? "CloudTrail" : "graph diff")] }))) : empty("No changes in this window")));
+}
 
-loadScenarios().then(() => { refreshFeed().catch(() => {}); loadGraph().then(refreshList).catch(() => {}); })
-  .catch(e => $("placeholder").append(el("p", { class: "err" }, e.message)));
-refreshList().catch(() => {});
-setInterval(() => {
-  refreshList().catch(() => {}); refreshFeed().catch(() => {});
-  // keep the open incident live (verification can resolve it minutes after Approve)
-  const s = document.querySelector('#incStatus .pill');
-  if (current && s && !['resolved', 'failed'].includes(s.textContent)) openIncident(current).catch(() => {});
-}, 5000);
+/* ---------- Actions ---------- */
+// AWS errors carry a long encoded blob: keep the readable first sentence, the rest is in the tooltip
+const shortDetail = (d) => { if (!d) return ""; const t = d.split(" Encoded authorization failure message")[0]; return t.length > 160 ? t.slice(0, 157) + "…" : t; };
+async function pActions(page) {
+  setTitle("Actions");
+  const rows = await api("actions?limit=300");
+  page.replaceChildren(el("div", { class: "card" }, el("p", { class: "sub" }, "Audit log of every fix rootgraph proposed: who approved it, when it ran, and whether verification passed."),
+    rows.length ? table(["Proposed", "Action", "Target", "Incident", "Status", "Approved by", "Result"],
+      rows.map(a => ({ data: a, cells: [el("span", { class: "mono muted" }, fmtTime(a.proposed_at)), el("span", { class: "strong" }, ACTION[a.kind] || a.kind), nm(a.target),
+        el("a", { class: "idcell", href: `#/incidents/${a.incident}` }, a.incident), st(a.status), a.approved_by || el("span", { class: "muted" }, "—"), el("span", { class: "muted small", title: a.detail || "" }, shortDetail(a.detail))] })))
+      : empty("No actions yet", "Fixes appear here once rootgraph proposes them.")));
+}
+
+/* ---------- Topology ---------- */
+async function pTopology(page, parts, quiet) {
+  if (quiet) return;
+  setTitle("Topology");
+  if (!S.graph) await loadGraph();
+  const sel = parts[1] || null;
+  const box = el("div", { class: "cyb" }), panel = el("div", { class: "card" });
+  const search = el("input", { type: "search", placeholder: "Find a resource…", "aria-label": "Find a resource", list: "rids",
+    onchange: (e) => { const v = e.target.value.trim(); const hit = S.graph.nodes.find(n => n.rid === v || n.name === v); if (hit) location.hash = `#/topology/${encodeURIComponent(hit.rid)}`; } });
+  page.replaceChildren(el("div", { class: "topo" }, el("div", { class: "card" }, el("div", { class: "row", style: "margin-bottom:12px" },
+    el("h2", { style: "margin:0" }, "Infrastructure graph"), el("span", { class: "spacer" }),
+    el("div", { style: "width:260px;max-width:100%" }, search, el("datalist", { id: "rids" }, ...S.graph.nodes.map(n => el("option", { value: n.name || n.rid }))))), box,
+    el("div", { class: "legend" }, el("span", {}, el("i"), "depends on"), el("span", {}, el("i", { style: "border-top:1.5px dashed var(--fog)" }), "runs on · protects"),
+      el("span", {}, el("i", { style: "border-top:1.5px dotted var(--fog)" }), "allowed by rule"), el("span", {}, el("b", { style: "background:#3a1d16;box-shadow:inset 0 0 0 2px var(--ember)" }), "blast radius of the selection"))), panel));
+  const cy = drawGraph(box, { selected: sel, onTap: (id) => location.hash = `#/topology/${encodeURIComponent(id)}` });
+  if (!sel) { panel.replaceChildren(el("h2", {}, "Select a resource"), el("p", { class: "sub", style: "margin:0" }, `${S.graph.nodes.length} resources and ${S.graph.edges.length} relationships. Click any node to see what depends on it, what protects it, and what changed.`)); return; }
+  panel.replaceChildren(el("p", { class: "muted" }, "Loading…"));
+  const r = await api(`resources/${encodeURIComponent(sel)}`);
+  const blast = new Set(r.blast_radius.map(b => b.affected));
+  if (cy) cy.nodes().forEach(n => { if (blast.has(n.id())) n.addClass("blast"); });
+  const sec = (title, kids) => [el("p", { class: "eyebrow", style: "margin:18px 0 8px" }, title), kids];
+  const li = (rid, extra) => el("li", {}, el("a", { href: `#/topology/${encodeURIComponent(rid)}` }, nm(rid)), extra ? el("span", { class: "muted small" }, " · " + extra) : null);
+  const none = (t) => el("p", { class: "muted small", style: "margin:0" }, t);
+  panel.replaceChildren(el("h2", {}, nm(r.rid)), el("p", { class: "sub mono", style: "margin:0" }, [r.rid, KLABEL[S.kinds[r.rid]], r.state, r.status].filter(Boolean).join(" · ")),
+    ...sec(`Blast radius (${r.blast_radius.length})`, r.blast_radius.length ? el("ul", { class: "list" }, ...r.blast_radius.map(b => li(b.affected, b.hops != null ? `${b.hops} hop${b.hops > 1 ? "s" : ""}` : ""))) : none("Nothing depends on it.")),
+    ...sec("Depends on", r.depends_on.length ? el("ul", { class: "list" }, ...r.depends_on.map(d => li(d.target, [d.kind, d.port].filter(Boolean).join(" ")))) : none("No declared dependencies.")),
+    ...sec("Protected by", r.firewalls.length ? el("ul", { class: "list" }, ...r.firewalls.map(f => li(f))) : none("No security groups.")),
+    ...sec("Changes, last 7 days", r.changes.length ? el("ul", { class: "list" }, ...r.changes.slice(0, 8).map(c => el("li", {}, el("span", { class: "mono muted" }, fmtTime(c["ch.at"]) + "  "),
+      `${c["ch.event_name"]} · ${who({ actor: c["ch.actor"], by_agent: c["ch.by_agent"], source: c["ch.source"] })}`))) : none("No changes.")),
+    ...sec("Incidents", r.incidents.length ? el("ul", { class: "list" }, ...r.incidents.map(i => el("li", {}, el("a", { href: `#/incidents/${i.id}` }, i.id), el("span", { class: "muted small" }, ` · ranked #${i.rank} · ${i.status}`)))) : none("Never a suspect.")));
+}
+
+/* ---------- Memory ---------- */
+async function pMemory(page) {
+  setTitle("Memory");
+  const rows = await api("memory");
+  page.replaceChildren(el("div", { class: "card" },
+    el("p", { class: "sub" }, "What rootgraph has learned. Every resolved incident stays in the graph with its root cause, the change behind it and the fix that worked. When similar alerts fire again, it recalls them and offers the proven fix first."),
+    rows.length ? table(["Incident", "Root cause", "Caused by", "Fix that worked", "Resolved in", "Approved by", "Recalled"],
+      rows.map(m => ({ data: m, cells: [el("span", { class: "idcell" }, m.id),
+        el("span", {}, el("span", { class: "strong" }, m.root_name || m.root_cause), el("div", { class: "muted small" }, KLABEL[kindOf(m.root_kinds || [])] || "")),
+        m.change ? el("span", {}, m.change, el("div", { class: "muted small" }, m.actor ? who({ actor: m.actor }) : "seen by discovery")) : el("span", { class: "muted" }, "—"),
+        m.fix ? ACTION[m.fix] || m.fix : "—", dur(m.ttr_seconds), m.approved_by || "—",
+        m.recalled_by.length ? el("span", { class: "pill agent", title: m.recalled_by.join(", ") }, `${m.recalled_by.length}× by later incidents`) : el("span", { class: "muted small" }, "not yet")] })),
+      (m) => location.hash = `#/incidents/${m.id}`) : empty("Nothing learned yet", "Resolved incidents become memory automatically.")));
+}
+
+/* ---------- Integrations ---------- */
+async function pIntegrations(page) {
+  setTitle("Integrations");
+  const x = await api("integrations"), prod = S.env === "prod";
+  const card = (title, state, lines) => el("div", { class: "card" }, el("h2", {}, el("span", { class: "statusdot " + state }), title),
+    el("dl", { class: "kv", style: "margin:12px 0 0" }, ...lines.filter(Boolean).flatMap(([k, v]) => [el("dt", {}, k), el("dd", {}, v)])));
+  page.replaceChildren(el("div", { class: "grid" },
+    el("div", { class: "card", style: "padding:14px 20px" }, el("div", { class: "row" }, el("span", { class: "dot " + (prod ? "prod" : "stage") }),
+      el("span", { class: "strong" }, x.environment.name), el("span", { class: "muted" }, "· " + x.environment.detail), el("span", { class: "spacer" }), el("span", { class: "mono muted" }, "graph " + x.environment.graph))),
+    el("div", { class: "grid g2" },
+      card("FalkorDB graph", x.falkordb.ok ? "ok" : "bad", [["Status", x.falkordb.ok ? "connected" : "unreachable"], ["Graph", el("code", {}, x.falkordb.graph)], ["Holds", `${x.falkordb.resources} resources · ${x.falkordb.edges} relationships`]]),
+      card("AWS discovery", prod ? (x.discovery.last_sync && Date.now() / 1000 - x.discovery.last_sync < 600 ? "ok" : "warn") : "off", [["Mode", x.discovery.mode], ["Last sync", x.discovery.last_sync ? `${ago(x.discovery.last_sync)}` : "—"]]),
+      card("CloudTrail change stream", x.cloudtrail.configured ? "ok" : "off", [["Path", x.cloudtrail.path], ["Status", x.cloudtrail.configured ? "connected" : prod ? "not configured" : "not used in staging"],
+        ["Last event", x.cloudtrail.last_event ? ago(x.cloudtrail.last_event) : "—"], ["In the graph", `${x.cloudtrail.events} CloudTrail events · ${x.cloudtrail.changes} changes in total`]]),
+      card("Alerts", prod ? (x.alerts.prometheus_ready ? "ok" : "bad") : "off", [["Source", x.alerts.source], prod ? ["Prometheus", x.alerts.prometheus_ready ? "ready" : "unreachable"] : null,
+        ["Last alert", x.alerts.last_alert ? ago(x.alerts.last_alert) : "—"], ["Received", `${x.alerts.alerts || 0} alerts`]]),
+      card("AI agent", x.ai.configured ? "ok" : "off", [["Provider", x.ai.provider], ["Models", x.ai.models.length ? el("span", {}, ...x.ai.models.map((m, i) => [i ? " → " : "", el("code", {}, m)])) : "none"],
+        ["Last answer", x.ai.last_explained_by ? humanExplainer(x.ai.last_explained_by) : "—"], ["Guardrails", x.ai.guardrails]]),
+      card("Executor", "ok", [["Runs as", x.executor.principal], ["Approval", x.executor.approval],
+        ["May do", el("ul", { class: "list" }, ...x.executor.actions.map(a => el("li", {}, el("span", { class: "strong" }, ACTION[a.kind] || a.kind), el("span", { class: "muted small" }, " on " + a.targets.map(t => KLABEL[t] || t).join(", ")))))],
+        ["May not", "delete or stop anything, or act without approval"]]))));
+}
+
+start();
 </script>
 </body>
 </html>

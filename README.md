@@ -2,7 +2,7 @@
 
 Many alerts, one cause. The graph decides, the agent investigates and explains, a human acts.
 
-- Live sandbox: https://172-232-86-149.sslip.io
+- Console: https://172-232-86-149.sslip.io (sign-in required; judges get an account with the submission)
 - Repository: https://github.com/guranshdeol/graph-incident-responder
 - Tracks entered: Track 01 (Agents That Act on Connected Data) and Track 02 (Agent Memory)
 
@@ -15,7 +15,7 @@ rootgraph watches an AWS estate. When several alerts fire together, it walks the
 | Hand-seeded graph | Services are declared in `ingest/services.yaml`. Hosts, databases, networks, security groups and rules are discovered from AWS every 60 s, and resynced before each live investigation. Infrastructure changes are streamed from CloudTrail. Observed-traffic dependencies are not built. |
 | Downward: "what breaks if X fails" | Upward: `correlate_alerts` (Q2) ranks the nodes that explain the firing alerts. The downward view exists as the `blast_radius` tool (Q6). |
 | Service dependencies only | Services, hosts, networks and security-group rules. `check_path` (Q4) catches "the dependency exists, the network path doesn't". |
-| Answers questions | Proposes a fix from a catalogue (`restore_firewall_rule`, `restart_service`) with its blast radius and rollback. Only the Approve button in the UI can execute it. Sandbox execution only writes to the graph. |
+| Answers questions | Proposes a fix from a catalogue (`restore_firewall_rule`, `restart_service`) with its blast radius and rollback. Only a signed-in operator can approve it, and the approval is recorded under their name. In Staging, execution only writes to the graph. |
 | Findings as memory | Incidents, root causes, CloudTrail changes and verified actions are nodes in the graph. `recall_incidents` (Q7) matches them by alert names and candidate resources, and a recalled fix carries its exact parameters. |
 
 ## What happens during an incident
@@ -177,13 +177,15 @@ Every one of the 47 query files (Q1–Q21 read, W1–W23 write) is listed with i
 - **Validator and template fallback.** The root cause must be a scored candidate. Every resource id in the explanation must appear in the evidence. The action must be in the catalogue and aimed at the root cause. A failed check falls back to the template.
 - **Transport.** The Alertmanager webhook uses a bearer token over HTTPS, served by Caddy. FalkorDB is bound to localhost and is not exposed. The UI inserts all data as text, never as HTML.
 - **Secrets.** `.env` and the AWS credential files are git-ignored. Only `.env.example` is committed.
-- **Public sandbox.** `SANDBOX_MODE=true` leaves inject, reset, approve and reject open without a token, on purpose, so judges can click through. Their effects are graph-only. With `SANDBOX_MODE=false`, those endpoints need `ADMIN_TOKEN`.
+- **Sign-in for everything.** The console and every `/api` call need a named user (`api/auth.py`: PBKDF2 password hashes in `.env`, signed HttpOnly session cookie, 8 failed sign-ins per 5 min per client). Roles: `operator` (approve, reject, drills) and `viewer` (read only). Approvals are recorded under the signed-in name. `ADMIN_TOKEN` still works for scripts.
 
 ## Run it
 
-### a. Try the live sandbox
+### a. Use the console
 
-Open https://172-232-86-149.sslip.io. Click **S1 Security-group rule revoked** to inject the fault, read the root cause, scorecard, graph and tool trace, then click **Approve and execute** on the proposed restore. Next click **S4 Repeat of S1 (memory)**: recall finds the earlier incident and pre-fills the fix. **Reset sandbox** starts over.
+Open https://172-232-86-149.sslip.io and sign in. The console has two environments (switcher, top left): **Production** is the real AWS estate in Sydney, **Staging** a simulated copy for fault drills. Pages: Overview, Incidents (Summary, Timeline, Evidence, Graph, Agent trace), Changes (the account's change feed), Actions (approval audit log), Topology (graph explorer with blast radius), Memory (what it learned) and Integrations. In Staging, **Simulate incident** runs a drill; in Production, change something in the AWS console or use **Fault drill**. Step by step: [docs/CHECKING.md](docs/CHECKING.md).
+
+Add a user: `uv run python -m api.auth add <name> <operator|viewer>` (password goes to `demo/accounts.txt`, mode 600, git-ignored), then restart `api` and `api-live`.
 
 ### b. Local setup with Docker
 
@@ -279,7 +281,7 @@ For Claude Desktop or Claude Code, register that command as a stdio MCP server, 
 - **Fixed depth.** Q6 has a fixed upper bound of 4 hops, and the `blast_radius` tool clamps depth to 1 to 4.
 - **The graph panel shows the current graph,** not a snapshot at the time of the incident.
 - **One writer at a time.** A process-wide lock serialises injections, investigations and approvals, and the API runs as one uvicorn worker.
-- **The public sandbox is unauthenticated on purpose.** Its effects are graph-only.
+- **Accounts are shared per person, not per organisation.** There is no SSO, password reset or per-environment role yet; a production version would use the company IdP (OIDC/SAML).
 
 ## AI assistance disclosure
 

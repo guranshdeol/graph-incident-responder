@@ -201,7 +201,7 @@ class Tools:
         args = {"minutes": minutes}
         now = int(time.time()) if now is None else int(now)
         return self._run("changes_since", args, "q24_changes_since",
-                         {"since": now - int(minutes) * 60, "limit": max(1, min(int(limit), 50))})
+                         {"since": now - int(minutes) * 60, "limit": max(1, min(int(limit), 200))})
 
 def tools_for(graph_name: str | None = None) -> Tools:
     return Tools(db.graph(graph_name))
