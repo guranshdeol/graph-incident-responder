@@ -135,3 +135,9 @@ One line per non-obvious choice (plan §15.4). Newest at the bottom.
 - **Environments, not sites:** one console with a switcher. Production = `ops_live` (served via `/live/api`), Staging = `ops_sandbox` (`/api`). Scenarios became "Simulate incident" fault drills in Staging; the live break button became "Fault drill" in Production.
 - **Pages and their queries:** Overview (`/api/overview`: Q19, Q28, Q24, Q8 PageRank, Q17), Incidents (tabs over the stored report), Changes (Q24, up to 7 days), Actions audit (Q28), Topology (Q17/Q18 + `/api/resources/{rid}`: Q1, Q26, Q25, Q9, Q6, Q5, Q32), Memory (Q29 + reuse counts from Q30), Integrations (Q31 + config, Prometheus readiness). All fixed Cypher, documented in docs/graph.md.
 - Existing history is shown as recorded: earlier approvals carry the names typed at the time ("manual-test", "anonymous", "demo video").
+
+## Our own design system (Sat 17 Oct 2026, night)
+
+- **Why:** the previous reference (an auth vendor's marketing style: dark glass, conic spotlight, gradient headline) is the recognisable AI-landing-page package and was never meant for an operations console. Team reviewed Refero styles and chose Ramp's structure + Vercel's monospace texture.
+- **docs/DESIGN.md is now rootgraph's own spec:** light warm canvas, ink, hairlines, no shadows or gradients; one signal colour (#e4f222) only for what needs a person (primary action, open incident, fix awaiting approval, active tab); a documented status extension (red/amber/green) only for state; IBM Plex Sans + Geist Mono, weights ≤ 500; `▲` before commands, `✓` on verified results; one dark band per page (Overview metric strip, incident root-cause plate).
+- **Robustness:** the graph library loads on demand with a second CDN as fallback; a failed CDN load had left Graph/Topology blank in one test run.
