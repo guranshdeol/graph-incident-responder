@@ -31,7 +31,7 @@ for a in alerts:
     svg.append(f'<circle cx="{a[0]:.0f}" cy="{a[1]:.0f}" r="11" class="alert"/>')
 svg.append(f'<circle cx="{cause[0]}" cy="{cause[1]}" r="30" class="cause"/>')
 svg.append(f'<text x="{cause[0]}" y="{cause[1] + 92}" class="lbl">the cause</text>')
-svg.append(f'<text x="{alerts[0][0] - 6:.0f}" y="62" class="lbl l">10 alerts</text>')
+svg.append(f'<text x="{alerts[0][0] - 6:.0f}" y="62" class="lbl l">alerts</text>')
 html = f"""<html><head>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Geist+Mono:wght@500&display=swap" rel="stylesheet">
 <style>
@@ -54,7 +54,7 @@ svg{{position:absolute;inset:0}}
 <svg viewBox="0 0 {W} {H}">{''.join(svg)}</svg>
 <div class="txt"><div class="eye"><i></i>rootgraph · on a FalkorDB graph</div>
 <h1>Many alerts.<br><span>One cause.</span></h1>
-<p>We broke a real AWS account by hand, and taught a graph to find who did it.</p></div>
+<p>From four alerts at 2 a.m. to the one change behind them.</p></div>
 <div class="foot">Graph Hacks · WeMakeDevs × FalkorDB</div>
 </div></body></html>"""
 out = pathlib.Path(__file__).parent
