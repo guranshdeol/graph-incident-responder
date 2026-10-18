@@ -7,7 +7,7 @@ Read `STATUS.md` for where things stand, `DECISIONS.md` for why things are the w
 
 - This server (Linode, Mumbai, 172.232.86.149) is the control plane and the only dev machine. Agents work one at a time, directly in `/opt/rootgraph/app` on `main`.
 - Public sandbox: https://172-232-86-149.sslip.io (API container `app-api-1`, graph `ops_sandbox`). Live estate: `/live/` (`api-live`, compose profile `aws`, graph `ops_live`).
-- GitHub: `guranshdeol/graph-incident-responder` (public). The server pushes with a repo-only deploy key.
+- GitHub: `guranshdeol/rootgraph-incident-responder` (public). The server pushes with a repo-only deploy key.
 
 ## Rules
 

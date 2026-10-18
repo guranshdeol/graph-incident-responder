@@ -66,7 +66,9 @@ def test_estate_up_writes_state_and_credentials(aws):
     doc = aws["session"].client("iam").get_user_policy(UserName="rootgraph-executor",
                                                        PolicyName="rootgraph-executor")["PolicyDocument"]
     policy = json.loads(doc) if isinstance(doc, str) else doc
-    assert any(st["sg_db"] in s["Resource"] for s in policy["Statement"])  # executor scoped to sg-db only
+    res = lambda s: s["Resource"] if isinstance(s["Resource"], list) else [s["Resource"]]
+    authorize = [s for s in policy["Statement"] if s["Action"] == "ec2:AuthorizeSecurityGroupIngress"]
+    assert authorize and all(r.endswith((st["sg_db"], st["sg_host1"], st["sg_host2"])) for s in authorize for r in res(s))  # demo groups only
 
 
 def test_discovery_builds_the_estate(aws, g):

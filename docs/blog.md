@@ -143,4 +143,4 @@ The two gaps most relevant to the claims here are the Q4 limits and the lack of 
 ## Try it
 
 - Sandbox: https://172-232-86-149.sslip.io. Click S1 to inject the fault, approve the proposed restore, then click S4 to see recall pre-fill the fix.
-- Repository: https://github.com/guranshdeol/graph-incident-responder. The README covers Docker setup and the tests. The project was built with AI coding assistants, and the README says which ones and for what.
+- Repository: https://github.com/guranshdeol/rootgraph-incident-responder. The README covers Docker setup and the tests. The project was built with AI coding assistants, and the README says which ones and for what.

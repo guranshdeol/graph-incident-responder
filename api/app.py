@@ -309,10 +309,17 @@ def _watchdog_loop():
 
 
 @app.on_event("startup")
-def _start_watchdog():
+def _on_startup():
     if not SANDBOX_MODE and PROMETHEUS_URL and MONITOR_INTERVAL > 0:
         threading.Thread(target=_watchdog_loop, daemon=True, name="watchdog").start()
         log.info("watchdog: checking %s every %ds", PROMETHEUS_URL, MONITOR_INTERVAL)
+    if SANDBOX_MODE:   # a fresh install: give Staging its simulated estate so the first drill works
+        try:
+            if not g().query("MATCH (r:Resource) RETURN count(r)").result_set[0][0]:
+                db.load_fixture(g())
+                log.info("staging graph was empty: loaded the fixture estate")
+        except Exception:
+            log.exception("could not check the staging graph")
 
 
 # -- read API ---------------------------------------------------------------------

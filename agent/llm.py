@@ -93,7 +93,7 @@ class OpenRouterClient:
         req = urllib.request.Request(
             f"{self.base_url}/chat/completions", data=json.dumps(body).encode(), method="POST",
             headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json",
-                     "HTTP-Referer": "https://github.com/guranshdeol/graph-incident-responder", "X-Title": "rootgraph"})
+                     "HTTP-Referer": "https://github.com/guranshdeol/rootgraph-incident-responder", "X-Title": "rootgraph"})
         with urllib.request.urlopen(req, timeout=self.timeout) as resp:
             return json.load(resp)
 
