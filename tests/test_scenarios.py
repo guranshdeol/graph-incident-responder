@@ -270,6 +270,7 @@ def test_late_reinvestigation_reuses_the_approved_action(g):
     ("s6", "sg-db", "revert_rule_edit", "FromPort=5432,ToPort=5432"),
     ("s7", "i-host2", "start_instance", "start-instances --instance-ids i-host2"),
     ("s8", "i-host1", "reattach_security_group", "--groups sg-host1"),
+    ("s9", "sg-host2", "restore_firewall_rule", "--group-id sg-host2"),   # cross-host rule (live, 18 Oct)
 ])
 def test_manual_change_is_found_and_undone(g, name, top, kind, cli_bit):
     sc, rep = investigate(g, name)

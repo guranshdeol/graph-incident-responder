@@ -51,7 +51,7 @@ One change at a time; let each incident resolve before the next.
 
 - Graph in FalkorDB Browser: `ssh -L 3000:localhost:3000 root@172.232.86.149`, open http://localhost:3000, graph `ops_live` or `ops_sandbox`.
 - Logs: `docker compose logs -f api-live discovery ingester` in `/opt/rootgraph/app`.
-- Real Prometheus: http://13.211.114.247:9090 is reachable only from the server (security group), e.g. `curl http://13.211.114.247:9090/api/v1/alerts`.
+- Real Prometheus: http://13.236.203.160:9090 is reachable only from the server (security group), e.g. `curl http://13.236.203.160:9090/api/v1/alerts`.
 - Tests: `set -a; . ./.env; set +a; FALKORDB_HOST=localhost PROMETHEUS_URL= LLM_API_KEY= uv run pytest -q`.
 
 ## 4. Cost and teardown

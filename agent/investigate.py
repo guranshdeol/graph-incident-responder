@@ -30,6 +30,9 @@ SUSPECT_K = 5
 CORRELATE_K = 25  # all rows kept for coverage lookups; top SUSPECT_K are the suspects
 
 
+DOWN_ALERTS = {"HostDown", "ServiceDown", "DependencyUnreachable"}
+
+
 class Investigator:
     def __init__(self, g, probe_source, now=time.time, resync=None, explain=None):
         self.g, self.tools, self.probes = g, Tools(g), probe_source
@@ -41,6 +44,11 @@ class Investigator:
         env["call_id"] = f"p{len(self.trace) + 1}"  # the LLM cites evidence by call_id
         self.trace.append(env)
         return env
+
+    def _host_of(self, rid: str) -> str | None:
+        """The instance a service runs on (None for anything that isn't a service)."""
+        _, rows = db.run(self.g, "q16_service_host", {"rid": rid})
+        return rows[0]["host"] if rows else None
 
     # -- steps ------------------------------------------------------------------
 
@@ -68,6 +76,7 @@ class Investigator:
 
         # 3 paths
         broken_paths = []
+        guarded_by: dict[str, str] = {}   # culprit firewall -> the other host it guards (cross-host paths)
         sources = [rid for rid in dict.fromkeys(alerting + list(cands))
                    if "Service" in (by_rid.get(rid, {}).get("kinds") or [])]
         checked = set()
@@ -94,6 +103,15 @@ class Investigator:
                 src_row = by_rid.get(src, {"explains": [src] if src in alerting else [], "min_hops": 0})
                 # the source's host also suffers if an alert there targets the dependency (blackbox)
                 host_alerts = {a["rid"] for a in firing if a["rid"] == row["host"] and a["target_rid"] == dep["target"]}
+                # a rule lost on ANOTHER host's security group cuts that host off from this one; monitoring scrapes
+                # cross the same boundary, so "down" alerts on the guarded host and its services are explained too
+                guarded = row.get("guarded")
+                if guarded and guarded != dep["target"] and culprits:
+                    cut_off = {a["rid"] for a in firing if a["alertname"] in DOWN_ALERTS
+                               and (a["rid"] == guarded or self._host_of(a["rid"]) == guarded)}
+                    host_alerts |= cut_off
+                    for fw in culprits:
+                        guarded_by[fw] = guarded
                 broken_paths.append({"from": src, "to": dep["target"], "host": row["host"], "port": row["port"],
                                      "firewalls": fws, "culprit_rules": list(culprits.values()), "detached": detached})
                 for fw in fws:
@@ -159,6 +177,9 @@ class Investigator:
                {"id": incident_id, "rows": [{"rid": r["rid"], "score": r["score"], "rank": r["rank"]} for r in rows]})
         # services that run on a down top-ranked host are its victims, not a second cause
         victims = set()
+        if rows and rows[0]["rid"] in guarded_by:   # a firewall that cut a host off: that host and its services are victims
+            g_host = guarded_by[rows[0]["rid"]]
+            victims |= {r["rid"] for r in rows[1:] if r["rid"] == g_host or self._host_of(r["rid"]) == g_host}
         if rows and "Compute" in rows[0]["kinds"] and rows[0]["probe"] == "unhealthy":
             for r in rows[1:]:
                 if "Service" in r["kinds"]:

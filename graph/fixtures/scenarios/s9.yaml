@@ -1,0 +1,37 @@
+# S9: someone removes host-2's inbound rule from host-1. web can no longer call orders, and Prometheus
+# (on host-1) can no longer scrape host-2, so host-2 and its services look "down" although they run.
+# Found on the live estate on 18 Oct: the path check only looked at the database's security group then.
+# SYNTHETIC FIXTURE. Offsets are seconds relative to the moment the scenario is injected.
+id: s9
+title: Host security-group rule revoked
+faults:
+  - revoke_rule: {fw: sg-host2, rule_id: sgr-h2-orders, at_offset: -120}
+  - cloudtrail:
+      event_name: RevokeSecurityGroupIngress
+      actor: arn:aws:iam::111122223333:user/alice
+      rids: [sg-host2]
+      at_offset: -150
+      request: {groupId: sg-host2, ipPermissions: {items: [{ipProtocol: tcp, fromPort: 8083, toPort: 8083}]}}
+alerts:
+  - {alertname: HighErrorRate, rid: "svc:web", severity: page}
+  - {alertname: HostDown, rid: i-host2, severity: page}
+  - {alertname: ServiceDown, rid: "svc:orders", severity: page}
+  - {alertname: ServiceDown, rid: "svc:reports", severity: page}
+probes:
+  "svc:web":      {up: 1, error_rate: 0.45, p95: 0.30}
+  "svc:checkout": {up: 1, error_rate: 0.00, p95: 0.08}
+  "svc:payments": {up: 1, error_rate: 0.00, p95: 0.08}
+  "svc:orders":   {up: 0}
+  "svc:reports":  {up: 0}
+  i-host1:        {up: 1, cpu: 20}
+  i-host2:        {up: 0}
+  "rds:orders-db": {reachable_from: {i-host1: 1, i-host2: 1}}
+probes_after_fix:
+  "svc:web":      {up: 1, error_rate: 0.00, p95: 0.10}
+  "svc:orders":   {up: 1, error_rate: 0.00, p95: 0.08}
+  "svc:reports":  {up: 1, error_rate: 0.00, p95: 0.10}
+  i-host2:        {up: 1, cpu: 18}
+expect:
+  top: sg-host2
+  action: restore_firewall_rule
+  multiple_causes: false

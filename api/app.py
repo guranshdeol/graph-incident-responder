@@ -237,6 +237,84 @@ async def alertmanager_hook(request: Request, background: BackgroundTasks,
     return {**result, "saved": path.name}
 
 
+# -- monitoring watchdog (live) -----------------------------------------------------
+# Prometheus and Alertmanager run on host-1. If that host stops, nothing can alert, so rootgraph sees
+# the change but opens no incident (found on the live estate, 18 Oct). The control plane is outside the
+# estate, so it watches the watcher: after MONITOR_FAILS failed readiness checks it files a synthetic
+# MonitoringUnreachable alert on the Prometheus host, which opens an incident like any other alert,
+# and resolves it once Prometheus answers again (that is what lets verification pass).
+
+MONITOR_INTERVAL = int(os.environ.get("MONITOR_INTERVAL", "20"))
+MONITOR_FAILS = int(os.environ.get("MONITOR_FAILS", "3"))
+_watch: dict = {"fails": 0, "firing": None}
+
+
+def _iso(t: int) -> str:
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(t))
+
+
+def _monitor_host() -> str | None:
+    from urllib.parse import urlparse
+    rid = os.environ.get("PROMETHEUS_HOST_RID")
+    if rid:
+        return rid
+    _, rows = db.run(g(), "q33_compute_by_ip", {"ip": urlparse(PROMETHEUS_URL).hostname or ""})
+    return rows[0]["rid"] if rows else None
+
+
+def _watchdog_alert(rid: str, status: str, starts_at: int, t: int) -> dict:
+    payload = {"receiver": "rootgraph-watchdog", "status": status, "groupKey": f"rootgraph-watchdog:{rid}",
+               "alerts": [{"status": status, "fingerprint": f"watchdog-{rid}",
+                           "labels": {"alertname": "MonitoringUnreachable", "rid": rid, "severity": "page"},
+                           "startsAt": _iso(starts_at), "endsAt": _iso(t) if status == "resolved" else "0001-01-01T00:00:00Z"}]}
+    (HOOKS_DIR / f"watchdog-{time.time_ns()}.json").write_text(json.dumps(payload, indent=2))
+    return alert_ingest.ingest(g(), payload, now=t)
+
+
+def watchdog_tick(ready: bool | None = None, t: int | None = None) -> dict | None:
+    """One readiness check. Returns the ingest result when it fired or resolved the alert."""
+    ready = _prometheus_ready() if ready is None else ready
+    t = now() if t is None else t
+    if ready:
+        _watch["fails"] = 0
+        if _watch["firing"]:
+            rid, starts = _watch["firing"]
+            _watch["firing"] = None
+            log.info("watchdog: Prometheus answers again; resolving MonitoringUnreachable on %s", rid)
+            return _watchdog_alert(rid, "resolved", starts, t)
+        return None
+    _watch["fails"] += 1
+    if _watch["fails"] < MONITOR_FAILS or _watch["firing"]:
+        return None
+    rid = _monitor_host()
+    if not rid:
+        log.warning("watchdog: Prometheus unreachable but its host is not in the graph")
+        return None
+    starts = t - _watch["fails"] * MONITOR_INTERVAL
+    _watch["firing"] = (rid, starts)
+    log.warning("watchdog: Prometheus unreachable for %d checks; MonitoringUnreachable on %s", _watch["fails"], rid)
+    result = _watchdog_alert(rid, "firing", starts, t)
+    if result["incident_id"] and (result["opened"] or result["new_firing"]):
+        threading.Thread(target=_investigate_bg, args=(result["incident_id"],), daemon=True).start()
+    return result
+
+
+def _watchdog_loop():
+    while True:
+        time.sleep(MONITOR_INTERVAL)
+        try:
+            watchdog_tick()
+        except Exception:
+            log.exception("watchdog tick failed")
+
+
+@app.on_event("startup")
+def _start_watchdog():
+    if not SANDBOX_MODE and PROMETHEUS_URL and MONITOR_INTERVAL > 0:
+        threading.Thread(target=_watchdog_loop, daemon=True, name="watchdog").start()
+        log.info("watchdog: checking %s every %ds", PROMETHEUS_URL, MONITOR_INTERVAL)
+
+
 # -- read API ---------------------------------------------------------------------
 
 @app.get("/api/incidents")

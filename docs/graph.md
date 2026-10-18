@@ -166,23 +166,28 @@ RETURN [n IN nodes(path) | n.rid] AS hops, pathWeight
 
 ### q4_check_path
 
-Decides whether the network route for a service-to-resource dependency is permitted, aggregated across all firewalls on the target; backs the `check_path` tool and the path sweep (investigation step 4).
+check_path (v3): verdict across ALL firewalls guarding the target.
 
-Params: $from, $to
+Params: $from, $to The guarded node is the target itself (a database), or the host it runs on when the target is a service on another host (web -> orders crosses into host-2's security group). Same-host calls never cross a firewall. Only ACTIVE attachments count: a security group detached from the host or target no longer protects or permits it.
 
 ```cypher
 MATCH (x:Service {rid: $from})-[:RUNS_ON]->(h:Compute)
 MATCH (x)-[d:DEPENDS_ON]->(y:Resource {rid: $to})
-MATCH (fw:Firewall)-[:PROTECTS]->(y)
-OPTIONAL MATCH (hfw:Firewall)-[:PROTECTS]->(h)
-WITH h, d, collect(DISTINCT fw) AS target_fws, collect(DISTINCT hfw) AS host_fws
+OPTIONAL MATCH (y)-[:RUNS_ON]->(yh:Compute)
+WITH h, d, coalesce(yh, y) AS t
+WHERE t <> h
+MATCH (fw:Firewall)-[pt:PROTECTS]->(t)
+WHERE coalesce(pt.active, true)
+OPTIONAL MATCH (hfw:Firewall)-[ph:PROTECTS]->(h)
+WHERE coalesce(ph.active, true)
+WITH h, d, t, collect(DISTINCT fw) AS target_fws, collect(DISTINCT hfw) AS host_fws
 UNWIND target_fws AS fw
 OPTIONAL MATCH (fw)-[r:ALLOWS_FROM]->(src)
   WHERE r.active = true
     AND r.port_from <= d.port AND d.port <= r.port_to
     AND (src = h OR src:Internet OR src IN host_fws)
-WITH h, d, fw, collect(r.rule_id) AS rules
-RETURN h.rid AS host, d.port AS port,
+WITH h, d, t, fw, collect(r.rule_id) AS rules
+RETURN h.rid AS host, d.port AS port, t.rid AS guarded,
        collect({firewall: fw.rid, rules: rules}) AS per_firewall,
        sum(size(rules)) > 0 AS permitted
 ```
@@ -262,15 +267,20 @@ ORDER BY target
 
 ### q10_removed_path_rules
 
-On a broken path, lists inactive firewall rules removed since a given time that matched the dependency port and source, using the same matching as Q4; called by the `removed_rules` tool, which the investigation uses to pick the culprit firewall.
+removed_path_rules: on a broken path (Q4 permitted = false), which firewall on the target (or the target service's host, as in Q4) lost a rule since $since that used to let $from's host through on the dependency port? Same matching as Q4, but over inactive rules.
 
 Params: $from, $to, $since
 
 ```cypher
 MATCH (x:Service {rid: $from})-[:RUNS_ON]->(h:Compute)
 MATCH (x)-[d:DEPENDS_ON]->(y:Resource {rid: $to})
-MATCH (fw:Firewall)-[:PROTECTS]->(y)
-OPTIONAL MATCH (hfw:Firewall)-[:PROTECTS]->(h)
+OPTIONAL MATCH (y)-[:RUNS_ON]->(yh:Compute)
+WITH h, d, coalesce(yh, y) AS t
+WHERE t <> h
+MATCH (fw:Firewall)-[pt:PROTECTS]->(t)
+WHERE coalesce(pt.active, true)
+OPTIONAL MATCH (hfw:Firewall)-[ph:PROTECTS]->(h)
+WHERE coalesce(ph.active, true)
 WITH h, d, fw, collect(DISTINCT hfw) AS host_fws
 MATCH (fw)-[r:ALLOWS_FROM]->(src)
 WHERE r.active = false AND r.removed_at >= $since
@@ -451,8 +461,10 @@ Params: $from, $to, $since
 ```cypher
 MATCH (x:Service {rid: $from})-[:RUNS_ON]->(h:Compute)
 MATCH (x)-[:DEPENDS_ON]->(y:Resource {rid: $to})
+OPTIONAL MATCH (y)-[:RUNS_ON]->(yh:Compute)
+WITH h, y, yh
 MATCH (fw:Firewall)-[p:PROTECTS]->(n:Resource)
-WHERE (n = h OR n = y) AND p.active = false AND p.removed_at >= $since
+WHERE (n = h OR n = y OR (yh IS NOT NULL AND n = yh)) AND p.active = false AND p.removed_at >= $since
 RETURN fw.rid AS firewall, n.rid AS target, labels(n) AS target_kinds, p.removed_at AS removed_at
 ORDER BY removed_at DESC
 ```
@@ -588,6 +600,18 @@ MATCH (i:Incident)-[s:SUSPECTS]->(:Resource {rid: $rid})
 RETURN i.id AS id, i.status AS status, i.opened_at AS opened_at, s.rank AS rank, s.score AS score
 ORDER BY opened_at DESC
 LIMIT $limit
+```
+
+### q33_compute_by_ip
+
+compute_by_ip: the instance that owns this public IP (the watchdog finds the monitoring host from PROMETHEUS_URL).
+
+Params: $ip
+
+```cypher
+MATCH (c:Compute {public_ip: $ip})
+RETURN c.rid AS rid, c.name AS name, c.state AS state
+LIMIT 1
 ```
 
 ## Write queries (ingestion, investigation, memory)
@@ -1026,5 +1050,5 @@ RETURN f.rid AS firewall
 # Known limitations
 
 - **Q4 does not match CIDR containment.** A `CidrBlock` source that contains the host's IP is not matched; only an exact `/32` that matches a known host becomes an edge to `Compute`.
-- **Q4 only checks firewalls that protect the target itself.** Service-to-service paths (for example `web → orders` across hosts) return `not_in_graph`, even when a firewall guards the target's host (for example `sg-host2` guarding `i-host2`). Fixing this means walking `RUNS_ON` to the target's host. That is a schema and query change that needs team agreement, so it is not done.
+- **Q4 checks the target, or the host a target service runs on.** Since 18 Oct (live: a rule removed on host-2's group was missed) a cross-host service call is checked against the security groups on the target's host. Same-host calls never cross a firewall and return `not_in_graph`.
 - **Q6 has a fixed upper bound of 4 hops.** Cypher does not accept a parameter as a variable-length bound, so `$depth` only filters the result. The `blast_radius` tool clamps depth to 1..4.

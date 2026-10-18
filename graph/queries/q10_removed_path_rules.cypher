@@ -1,9 +1,12 @@
 // Q10 removed_path_rules: on a broken path (Q4 permitted = false), which firewall on the
-// target lost a rule since $since that used to let $from's host through on the dependency
+// target (or the target service's host, as in Q4) lost a rule since $since that used to let $from's host through on the dependency
 // port? Same matching as Q4, but over inactive rules. Params: $from, $to, $since
 MATCH (x:Service {rid: $from})-[:RUNS_ON]->(h:Compute)
 MATCH (x)-[d:DEPENDS_ON]->(y:Resource {rid: $to})
-MATCH (fw:Firewall)-[pt:PROTECTS]->(y)
+OPTIONAL MATCH (y)-[:RUNS_ON]->(yh:Compute)
+WITH h, d, coalesce(yh, y) AS t
+WHERE t <> h
+MATCH (fw:Firewall)-[pt:PROTECTS]->(t)
 WHERE coalesce(pt.active, true)
 OPTIONAL MATCH (hfw:Firewall)-[ph:PROTECTS]->(h)
 WHERE coalesce(ph.active, true)

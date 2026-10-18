@@ -114,7 +114,7 @@ def test_webhook_auth_and_investigation(client, tmp_path):
 
 def test_unknown_things_404(client):
     assert client.get("/api/incidents/INC-nope").status_code == 404
-    assert client.post("/api/scenarios/s9/inject").status_code == 404
+    assert client.post("/api/scenarios/s99/inject").status_code == 404
     assert client.post("/api/actions/ACT-nope/approve", json={}).status_code == 404
 
 
@@ -196,3 +196,29 @@ def test_console_pages(client):
     integ = client.get("/api/integrations").json()
     assert integ["environment"]["name"] == "Staging" and integ["falkordb"]["ok"] is True
     assert client.get("/api/env").json()["user"]["role"] == "operator"
+
+
+def test_watchdog_catches_the_monitoring_host_going_down(client, monkeypatch):
+    """Live, 18 Oct: host-1 (Prometheus + Alertmanager) was stopped and nothing could alert. The control
+    plane now watches Prometheus itself and files MonitoringUnreachable on its host."""
+    from agent.probe import FixtureProbe
+    app_mod = client.app_mod
+    monkeypatch.setenv("PROMETHEUS_HOST_RID", "i-host1")
+    started = []
+    monkeypatch.setattr(app_mod.threading, "Thread", lambda target, args, daemon: type("T", (), {"start": lambda self: started.append(args[0])})())
+    g = db.graph("ops_test")
+    t = 1792500000
+    # discovery saw host-1 stop (W25 records the change before W26 overwrites the state)
+    db.run(g, "w25_state_change", {"rid": "i-host1", "state": "stopped", "sync_ts": t - 30})
+    db.run(g, "w26_set_state", {"rid": "i-host1", "state": "stopped"})
+    assert app_mod.watchdog_tick(ready=False, t=t) is None and app_mod.watchdog_tick(ready=False, t=t + 20) is None
+    fired = app_mod.watchdog_tick(ready=False, t=t + 40)                  # third failed check
+    assert fired["opened"] and started == [fired["incident_id"]]
+    assert app_mod.watchdog_tick(ready=False, t=t + 60) is None           # filed once, not every tick
+    rep = app_mod.Investigator(g, FixtureProbe({}), now=lambda: t + 70).run(fired["incident_id"])
+    assert rep["top"] == "i-host1" and rep["alertnames"] == ["MonitoringUnreachable"]
+    assert rep["proposals"][0]["action"]["kind"] == "start_instance"
+    assert app_mod.watchdog_tick(ready=True, t=t + 200) is not None      # Prometheus answers again
+    st = g.query("MATCH (a:Alert {fingerprint: 'watchdog-i-host1'}) RETURN a.status").result_set
+    assert st == [["resolved"]]                                           # this is what lets verification pass
+    assert client.get(f"/api/incidents/{fired['incident_id']}").json()["status"] == "open"   # verification closes it

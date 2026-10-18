@@ -121,6 +121,9 @@ class Estate:
         for key, name, sub, grp in (("host1", "host-1", sub_a, sg_h1), ("host2", "host-2", sub_b, sg_h2)):
             step(st, key, lambda name=name, sub=sub, grp=grp: self._instance(ami, name, sub, grp, profile))
 
+        # host-1 runs Prometheus, which the control plane queries: give it a fixed address, or a stop/start
+        # changes its public IP and rootgraph loses its probes (found on the live estate, 18 Oct)
+        step(st, "eip_host1", lambda: self._eip(st["host1"]))
         step(st, "db_subnet_group", lambda: self.rds.create_db_subnet_group(
             DBSubnetGroupName="rootgraph-db", DBSubnetGroupDescription="rootgraph", SubnetIds=[sub_a, sub_b],
             Tags=[TAG])["DBSubnetGroup"]["DBSubnetGroupName"])
@@ -138,7 +141,7 @@ class Estate:
 
         users = step(st, "users", lambda: self._users(sg_db, queue))
         step(st, "chaos", lambda: self._chaos_user(sg_db))
-        step(st, "executor_undo_v2", lambda: self._executor_undo(st))
+        step(st, "executor_undo_v3", lambda: self._executor_undo(st))
         self._write_credentials(st, users, queue)
         if self.wait:
             print("waiting for instances and orders-db (RDS takes ~10 min)...")
@@ -262,6 +265,13 @@ class Estate:
             out[user] = {"id": key["AccessKeyId"], "secret": key["SecretAccessKey"]}
         return out
 
+    def _eip(self, instance_id: str) -> dict:
+        self.ec2.get_waiter("instance_running").wait(InstanceIds=[instance_id])
+        a = self.ec2.allocate_address(Domain="vpc", TagSpecifications=[{"ResourceType": "elastic-ip", "Tags": [TAG]}])
+        self.ec2.associate_address(AllocationId=a["AllocationId"], InstanceId=instance_id)
+        print(f"  host-1 now at {a['PublicIp']}: set PROMETHEUS_URL_LIVE=http://{a['PublicIp']}:9090")
+        return {"allocation_id": a["AllocationId"], "ip": a["PublicIp"]}
+
     def _executor_undo(self, st: dict) -> bool:
         """Widen the executor to the undo actions for changes made by hand: put an edited rule back,
         re-attach a detached security group, start a stopped instance. Still nothing that deletes."""
@@ -269,7 +279,8 @@ class Estate:
         sgs = [f"arn:aws:ec2:{r}:{a}:security-group/{st[k]}" for k in ("sg_host1", "sg_host2", "sg_db")]
         demo = {"StringEquals": {"aws:ResourceTag/rootgraph": "demo"}}
         stmts = [
-            {"Effect": "Allow", "Action": "ec2:AuthorizeSecurityGroupIngress", "Resource": sgs[2]},
+            # any of the three demo groups: a lost rule can be on a host's group too (sg-host2, live 18 Oct)
+            {"Effect": "Allow", "Action": "ec2:AuthorizeSecurityGroupIngress", "Resource": sgs},
             {"Effect": "Allow", "Action": "ec2:ModifySecurityGroupRules",
              "Resource": sgs + [f"arn:aws:ec2:{r}:{a}:security-group-rule/*"]},  # the rule's source group counts too
             {"Effect": "Allow", "Action": ["ec2:StartInstances", "ec2:ModifyInstanceAttribute"],
@@ -355,6 +366,14 @@ class Estate:
                         self.s3.delete_objects(Bucket=b, Delete={"Objects": objs})
                 self.s3.delete_bucket(Bucket=b)
             attempt("trail bucket", empty_and_delete)
+        if "eip_host1" in st:   # an unattached Elastic IP keeps billing: release it before the instances go
+            alloc = st["eip_host1"]["allocation_id"]
+            def release_eip():
+                addr = self.ec2.describe_addresses(AllocationIds=[alloc])["Addresses"][0]
+                if addr.get("AssociationId"):
+                    self.ec2.disassociate_address(AssociationId=addr["AssociationId"])
+                self.ec2.release_address(AllocationId=alloc)
+            attempt("elastic ip", release_eip)
         if "db" in st:
             attempt("orders-db", lambda: self.rds.delete_db_instance(DBInstanceIdentifier="orders-db",
                                                                      SkipFinalSnapshot=True, DeleteAutomatedBackups=True))
