@@ -1,69 +1,50 @@
-![rootgraph: many alerts, one cause](https://raw.githubusercontent.com/guranshdeol/rootgraph-incident-responder/main/docs/img/incident.png)
+![Many alerts. One cause.](https://raw.githubusercontent.com/guranshdeol/rootgraph-incident-responder/main/docs/img/blog-cover.png)
 
-It's 2 a.m. and four alerts fire within a minute. Web, checkout and payments throw errors, and a probe says host-1 can't reach the orders database. The on-call engineer asks the only question that matters: **which one thing explains all of this?**
+At 8:03 on a Sunday night, one of us opened the AWS console and stopped the server that watches everything.
 
-For **Graph Hacks** (WeMakeDevs × FalkorDB) we built **rootgraph**, an incident responder that answers that question with a graph. It keeps a live FalkorDB graph of a real AWS account and walks it from the alerts to the change that caused them. It proves the conclusion with the network path and the CloudTrail record of who changed what, then proposes the exact undo. That undo runs only after a person approves it. Then rootgraph checks that the fix worked and remembers it for next time.
+We were testing our own incident responder, rootgraph, three days into a hackathon. It had already caught a deleted firewall rule on a real AWS account, a detached security group and a stopped container. We wanted to see what it would do with something bigger.
 
-This post covers the graph model, the Cypher that does the work, how the AI agent is kept honest, and what broke when we let teammates break the real AWS account by hand.
+It did nothing. No alert. No incident. Nothing on the screen moved.
 
-- **Repository:** https://github.com/guranshdeol/rootgraph-incident-responder
-- **Tracks:** Agents That Act on Connected Data, and Agent Memory and Coordination
+That silence turned out to be the most useful thing that happened all weekend, and it's a good place to start the story of what we built, why it runs on a graph, and what a real AWS account taught us that our 88 tests never did.
+
+✍️ [YOUR WORDS: one or two lines on what that moment felt like, or what you said out loud when nothing happened.]
 
 ---
 
-## The problem: the busiest node is not the guilty one
+## Four alerts at 2 a.m.
 
-In our headline scenario, someone deletes the security-group rule that lets host-1 reach `orders-db` on port 5432. Four alerts fire.
+Here's the problem we set out to solve.
 
-The obvious first move is to find the resource that explains the most alerts. That is **host-1**, because web, checkout and payments all run on it, and the failing probe starts there. It touches every alert.
+Four alerts arrive within a minute. Web, checkout and payments are throwing errors, and a probe says host-1 can't reach the orders database. You're on call, half awake, and there is only one question: *which one thing explains all of this?*
 
-But host-1 is perfectly healthy. The cause is a single rule on the database's firewall, and nothing on a normal dashboard points there.
+The obvious answer is host-1. Every failing service runs on it, and the broken probe starts there. It's connected to all four alerts.
 
-The problem is structural. A firewall rule is not on the dependency chain (service → service → database) or the hosting chain (service → host). No walk along those edges reaches it. Finding it means asking a different kind of question: *is the network path this dependency takes actually open, and if not, what changed?* That is a graph question, so we put everything in a graph.
+It's also completely healthy.
 
-## The graph model
+What actually happened is that someone deleted a single rule from the database's security group, the rule that let host-1 talk to Postgres on port 5432. Nothing on a dashboard points there, because a firewall rule doesn't sit on any of the lines you'd normally follow. It isn't a service another service calls, and it isn't the machine anything runs on. It's a condition on the path *between* them.
 
-Everything lives in one FalkorDB graph per environment: topology, firewall rules, alerts, changes, incidents, fixes and memory. There is no side database.
+So the question isn't "what's broken?" It's "**is the path this dependency takes actually open, and if not, what changed?**" That's not a log search. That's a graph question.
 
-![The incident's graph evidence: broken paths in red, the root cause in ink](https://raw.githubusercontent.com/guranshdeol/rootgraph-incident-responder/main/docs/img/graph.png)
+## Putting the whole estate in one graph
 
-**Infrastructure nodes** carry the label `Resource`, a kind label and a unique `rid`:
-
-| Kind | Example rid | Comes from |
-|---|---|---|
-| `Service` | `svc:payments` | declared in `services.yaml` |
-| `Compute` | `i-0a2b…` (EC2) | AWS discovery |
-| `Database` | `rds:orders-db` | AWS discovery |
-| `Firewall` | `sg-09a1…` (security group) | AWS discovery |
-| `Network`, `Internet`, `CidrBlock` | `subnet-…`, `internet` | AWS discovery |
-
-**The edges that matter:**
+rootgraph keeps a live FalkorDB graph of an AWS account. Services, EC2 hosts, the RDS database and the security groups are nodes. A service calling another is a `DEPENDS_ON` edge with a port, and a service sits on its host through `RUNS_ON`. A security group `PROTECTS` the instances it's attached to, and each of its rules becomes an edge from the group to the traffic it lets in:
 
 ```
-(Service)-[:DEPENDS_ON {kind, port}]->(Service | Database)
-(Service)-[:RUNS_ON]->(Compute)
-(Firewall)-[:PROTECTS {active}]->(Compute | Database)
 (Firewall)-[:ALLOWS_FROM {rule_id, proto, port_from, port_to, active, removed_at}]->(source)
-(Change {event_name, actor, by_agent})-[:MODIFIED]->(Resource)
-(Alert)-[:FIRING_ON]->(Resource)
-(Incident)-[:HAS_ALERT | SUSPECTS | ROOT_CAUSE | EXPLAINED_BY]->(…)
-(Action {kind, params, status})-[:FOR | TARGETS | RESOLVED]->(…)
 ```
 
-A security-group rule is an `ALLOWS_FROM` edge from the group to the traffic it lets in. That modelling choice is what makes path checks a graph query.
+That one modelling choice is what makes "is this path open?" a query instead of a guess.
 
-**History is never deleted.** When a rule disappears, discovery doesn't remove the edge. It sets `active = false` and `removed_at`, and writes a `Change` node. The undo needs the exact protocol, ports and source, and the inactive edge still holds them. Detached security groups (`PROTECTS.active = false`) and instance state changes (`running → stopped`) are recorded the same way.
+The graph doesn't just hold the current state. Every minute a discovery worker reads the account with a read-only IAM user and diffs it against the graph. When a rule disappears, we **don't delete the edge**. We set `active = false` and stamp `removed_at`, and we write a `Change` node. CloudTrail events arrive through EventBridge and SQS in about four seconds, carrying the name of whoever made the change. Alerts carry the same `rid` as the node they're about, so an alert isn't a line in a log. It's a place in the graph.
 
-**Keeping it current:**
-- **Discovery** reads the AWS account (EC2, RDS, security groups) every 60 seconds with a read-only IAM user, and diffs it against the graph.
-- **CloudTrail** events stream in through EventBridge and SQS, carrying who made each change. In our live runs a change reached the graph in about 4 seconds.
-- **Alerts** carry a `rid` label equal to a node's `rid`, so an alert is a place in the graph.
+Keeping the deleted rule turned out to matter more than anything else we did. When it's time to fix things, the graph still knows the exact protocol, port range and source of the rule that vanished. The fix isn't "add something that looks right". It's "put back exactly what was there".
 
-## Walk upward, then prove it
+![Graph evidence for an incident: broken paths in red, the root cause in black](https://raw.githubusercontent.com/guranshdeol/rootgraph-incident-responder/main/docs/img/graph.png)
 
-### Step 1: walk up from the symptoms
+## Walk up first, then make it prove itself
 
-FalkorDB's own "Blast Radius" demo looks *down* from a failure: what breaks if X fails? rootgraph walks *up* from the symptoms instead. Q2, `correlate_alerts`:
+When alerts fire, rootgraph starts at the alerting nodes and walks **upward**, the opposite direction of a blast-radius view:
 
 ```cypher
 UNWIND $alert_rids AS rid
@@ -75,11 +56,9 @@ ORDER BY coverage DESC, min_hops ASC
 LIMIT $k
 ```
 
-Each alerting resource follows dependency and hosting edges for up to four hops. The zero-length match lets it count as its own candidate. This gives **coverage**, and coverage alone ranks host-1 first. That's exactly the answer we can't trust yet.
+This finds what the alerts have in common. On its own it confidently picks host-1, the wrong answer. So every candidate has to survive evidence.
 
-### Step 2: is the path actually open?
-
-Q4, `check_path`, asks whether the network route for one dependency is allowed by every security group on the way:
+The most important piece is the path check. For a dependency like `payments → orders-db:5432`, one query walks from the service to its host, from the target to every security group guarding it, and looks for an active rule that admits the host on that port:
 
 ```cypher
 MATCH (x:Service {rid: $from})-[:RUNS_ON]->(h:Compute)
@@ -103,161 +82,116 @@ RETURN h.rid AS host, d.port AS port, t.rid AS guarded,
        sum(size(rules)) > 0 AS permitted
 ```
 
-A few details carry the logic:
-- **The guarded node** is the target itself (a database), or the host the target runs on when it's a service on another host. Calls between services on the same host never cross a firewall.
-- **Only active attachments count.** A detached security group no longer protects or permits anything.
-- **The verdict spans all firewalls on the target,** because AWS allows a connection if any attached group allows it.
+If the path is closed, a sibling query looks at the *inactive* rules on the same path, and the security group that lost one in the last half hour becomes the prime suspect. CloudTrail tells us who removed it and when. (Hold on to that `coalesce(yh, y)` line; it comes back later in the story, and it wasn't there until Sunday night.)
 
-In the headline scenario, `check_path(payments → orders-db)` returns `permitted = false`: a broken path.
-
-### Step 3: who broke it?
-
-A broken path doesn't name the culprit. Q10 applies the same matching to **inactive** rules removed in the last 30 minutes. The firewall that lost a rule which used to allow the path becomes the culprit. If no rule was removed, Q23 asks whether a security group was *detached* from the host or the target instead. Q5 then pulls the `Change` nodes on the candidate's neighbourhood, with the CloudTrail actor.
-
-## Scoring you can read
-
-Every candidate gets a deterministic score, written to the graph as `SUSPECTS` edges and shown in the console as a scorecard:
+Then everything is scored in the open:
 
 ```
-score = 3.0 × coverage   (share of alerting resources it explains)
-      + 2.0 × unhealthy  (its own probe fails)
-      − 2.0 × healthy    (its own probe is fine)
-      + 2.0 × broken path
-      + 2.0 × changed in the last 30 min (by a person, not by rootgraph)
-      + 1.0 × seen before (memory)
-      − 0.25 × hops
+3 × how many alerts it explains   + 2 × its own health check fails   − 2 × its health check passes
++ 2 × it's on a broken path        + 2 × a person changed it just now   + 1 × we've fixed this cause before
 ```
 
-Coverage makes a node a suspect, and the evidence decides. In the headline scenario, host-1 explains every alert but probes healthy, so it drops. The database's security group sits on a broken path and changed two minutes earlier, so it rises to the top.
+host-1 explains everything, but it's healthy, so it drops. The security group sits on a broken path and changed two minutes ago, so it rises. We checked how much this matters: ranking by "explains the most alerts" alone gets two of our five headline scenarios right. The full scorecard gets all five.
 
-Does the graph evidence actually matter? We compared rankers on the five headline scenarios ([docs/evaluation.md](https://github.com/guranshdeol/rootgraph-incident-responder/blob/main/docs/evaluation.md)):
+## An AI agent that isn't allowed to write queries
 
-| Ranker | Correct |
+We use an LLM, but on a short leash. After the deterministic pipeline ranks the suspects, an agent double-checks the ranking and explains it in plain English. It can only call **12 read-only tools**, and every one of them is a fixed Cypher query a person wrote and reviewed. It has to give a reason for every call. It cannot write Cypher, cannot approve anything and cannot touch AWS.
+
+A validator then checks the answer. The root cause has to be a scored candidate, and every resource it mentions has to appear in the evidence. If anything fails, a plain template built from the scorecard goes out instead. We ran on free NVIDIA Nemotron models through OpenRouter. When the free tier ran out of requests on Saturday, the explanations quietly switched to the template, and the diagnosis didn't change at all. That's the point: the graph decides, the agent explains.
+
+The same 12 tools are exposed over MCP, so you can point Claude Desktop at the graph and investigate it yourself.
+
+## The fix, and the human
+
+Every fix rootgraph can propose is the exact undo of a change it found in the graph: re-add the rule that was removed, edit back the rule that was changed, re-attach the security group that was detached, start the instance that was stopped. Before anyone approves, the console shows the precise AWS CLI command, what else depends on the thing being changed, and how to roll it back.
+
+Nothing runs until a signed-in person clicks **Approve**, and the approval is recorded under their name. The executor's IAM user can only undo: it can add, re-attach and start, never delete or stop. Then rootgraph waits until the alerts actually clear before it calls the incident resolved.
+
+And it remembers. A resolved incident stays in the graph, linked to its root cause, the change that explained it and the verified fix with its exact parameters. When the same fault comes back, the incident page says *"Seen before"* and the fix arrives pre-filled: *"the same fix resolved INC-… in 52 s."*
+
+![rootgraph's memory: what it learned, and how often later incidents recalled it](https://raw.githubusercontent.com/guranshdeol/rootgraph-incident-responder/main/docs/img/memory.png)
+
+## Saturday: the first real run
+
+We built the first version against a simulated estate through Friday night, then pointed it at a real AWS account on Saturday morning. The first surprise had nothing to do with graphs: our AWS organisation only allowed one region, so the whole estate went to Sydney. Two EC2 hosts, a Postgres RDS instance, security groups, CloudTrail, and Prometheus with Alertmanager on host-1.
+
+The first run worked, slowly. Then it failed in ways no mock could have shown us. A "resolved" notification sat waiting behind a slow investigation for three minutes, so verification timed out. A late notification for alerts we'd already filed opened a second incident. Two minutes wasn't long enough to see real alerts clear. We fixed each one and added a test for it.
+
+The clean run looked like this:
+
+| Time (UTC) | What happened |
 |---|---|
-| Coverage only (the busiest node) | 2 / 5 |
-| Coverage + hop distance | 2 / 5 |
-| rootgraph scorecard (paths, changes, health, memory) | **5 / 5** |
+| 06:58:23 | A rule is revoked: host-1 can no longer reach the database |
+| 06:58:59 | Real alerts open an incident (+36 s) |
+| 06:59:55 | Root cause: the database's security group. It also remembered fixing the same cause ten minutes earlier |
+| 07:00:37 | A person approves; the exact rule goes back |
+| 07:01:40 | Alerts clear, the incident closes as verified (162 s from open) |
 
-These are hand-made scenarios on a small estate, and we tuned the weights on them, so this shows the mechanism working, not general accuracy. It does show the point: **without the graph, you blame the wrong thing.**
+✍️ [YOUR WORDS: a line about watching the first real incident close.]
 
-## Where the AI agent fits, and how it's kept honest
+## "It looks simulated"
 
-The pipeline is deterministic and works without an LLM. The agent's job is to **double-check the ranking and explain it**, using the same graph:
+Here's the feedback that changed the project. Up to then, we broke things by clicking a button in our own UI. One of us said it plainly: *this looks simulated. Let us break it ourselves, the way people actually break things, and make rootgraph find it.*
 
-- **Typed tools only.** It chooses among 12 read-only tools (`check_path`, `removed_rules`, `detached_on_path`, `changes_since`, `recent_changes`, `blast_radius`, `path_between`, `recall_incidents`, and others). Each tool is one fixed, human-written Cypher query. **The model never writes Cypher.**
-- **A reason for every call.** Calls without a reason are rejected. The console's Agent trace shows each call the AI chose, its reason, the Cypher and the rows it got back.
-- **A validator on the answer.** The root cause must be a scored candidate, every resource it names must appear in the evidence, and the fix must come from the catalogue. If any check fails, a template answer built from the scorecard goes out instead. The diagnosis never depends on the AI.
-- **No hands.** The agent can't approve or execute anything.
+So we did. We stopped telling rootgraph anything. From the AWS console and the CLI we edited rules, detached a security group from the database, stopped a server, and stopped a container on a host. rootgraph had to work out what changed on its own, from CloudTrail and its own graph diff.
 
-We used OpenRouter with free NVIDIA Nemotron models (Ultra, falling back to Super, then 3.5 Super VL). The same 12 tools are exposed over **MCP**, so Claude Desktop or Claude Code can investigate the same graph.
+| What we changed by hand | What rootgraph concluded | Fixed in |
+|---|---|---|
+| Detached the database's security group | `orders-db` lost its security group: 12 alerts, one cause | **52 s** |
+| Stopped host-2 | host-2 went running → stopped; its services are victims, not causes | 64 s |
+| Revoked a firewall rule | The exact rule, and who removed it | 92 s |
+| Stopped the payments container | payments is down; the network is fine | 93 s |
+| Changed a rule's port from 5432 to 5433 | "Rule edited", with the old and new values | verified |
 
-## Acting: the exact undo, only with a person's approval
+Those times run from the incident opening to a verified fix, and they include a person reading the proposal and clicking Approve.
 
-Every fix in the catalogue undoes one kind of change found in the graph:
+That brings us back to Sunday night.
 
-| Change found in the graph | Fix |
-|---|---|
-| A rule removed (`ALLOWS_FROM.active = false`) | re-add that exact rule |
-| A rule edited in place (port 5432 → 5433) | edit it back |
-| A security group detached (`PROTECTS.active = false`) | re-attach it |
-| An instance stopped (`running → stopped`) | start it |
-| A container down, with no infrastructure change | start the container over SSM |
+## Sunday, 8:03 p.m.: the silence
 
-Before approval, the console shows the exact AWS CLI command, the blast radius (what depends on the target) and the rollback. The approval is recorded under the signed-in operator's name. The executor runs as an **undo-only IAM user**: it can re-add, re-attach and start, but it cannot delete or stop anything. Its own changes are tagged `by_agent = true`, so a fix is never mistaken for a new cause.
+We stopped host-1. And nothing happened.
 
-Then **verification**. rootgraph polls until the incident's alerts resolve and the path or probe checks out. Only then is the incident closed.
+It took us a minute to see why, and it's embarrassing in hindsight: **host-1 runs Prometheus and Alertmanager.** We had stopped the thing that raises the alarms. The graph knew perfectly well; discovery had recorded `running → stopped`. But a change on its own doesn't open an incident, and there was no longer anything left to send an alert.
 
-## Memory lives in the graph too
+Then it got worse. Next, someone removed the inbound rule on host-2's security group and stopped host-2 at the same time: two faults at once. rootgraph saw the stopped instance and proposed starting it. We approved. host-2 came back up, and the alerts kept firing. After five minutes rootgraph marked the incident as **failed**.
 
-When an incident resolves, it stays in the graph, linked to the infrastructure it was about:
+That was honestly the right call. It refused to say "resolved" while the alarms were still going. But it had missed the rule, and we had to know why. Three things had gone wrong, and none of them showed up in a single test:
 
-- **Episodic:** the `Incident` with its alerts, root cause, the `Change` that explained it, and the time to resolve.
-- **Procedural:** the verified `Action` with its kind and **exact parameters**.
-- **Semantic:** a `Finding` with the validated explanation. Every resource it names must resolve in the graph.
+1. **The watcher was inside the thing it watched.** If the monitoring host dies, nothing can alert. We added a **watchdog** outside the estate. The control plane checks Prometheus every 20 seconds, and after three failures it raises a `MonitoringUnreachable` alert on the Prometheus host itself. That alert opens an incident like any other, and the watchdog resolves it as soon as Prometheus answers again.
+2. **The monitoring host got a new address.** Stopping and starting an EC2 instance changes its public IP unless you pin it. So since the first restart, every health check rootgraph made had been going to a dead address. Every probe in the failed incident came back "unknown", and it was flying half blind. We gave host-1 an Elastic IP.
+3. **The path check couldn't see a host's own firewall.** Our query only checked security groups attached directly to a dependency's target. That's fine for "can payments reach the database?", but `web → orders` crosses into *host-2's* security group, because orders is a service running on host-2. The query never looked there. That's the `coalesce(yh, y)` from earlier: when the target is a service on another host, the node to check is that host. We added a test scenario that reproduces exactly what was done that night.
 
-Recall (Q7) matches past incidents by alert-name overlap or by the same root cause:
+Then we stopped host-1 again.
 
-```cypher
-MATCH (i:Incident {status: 'resolved'})-[:ROOT_CAUSE]->(rc:Resource)
-OPTIONAL MATCH (i)-[:HAS_ALERT]->(al:Alert)
-WITH i, rc, collect(DISTINCT al.alertname) AS past_alerts
-WITH i, rc, size([a IN past_alerts WHERE a IN $alertnames]) AS alert_overlap,
-     CASE WHEN rc.rid IN $candidate_rids THEN 1 ELSE 0 END AS same_cause
-WHERE alert_overlap > 0 OR same_cause = 1
-OPTIONAL MATCH (i)-[:EXPLAINED_BY]->(ch:Change)
-OPTIONAL MATCH (act:Action {status: 'verified'})-[:RESOLVED]->(i)
-RETURN i.id, i.opened_at, i.ttr_seconds, rc.rid AS root_cause, ch.event_name AS change,
-       act.kind AS fix, act.params AS fix_params, alert_overlap, same_cause
-ORDER BY same_cause DESC, alert_overlap DESC, i.opened_at DESC
-LIMIT 3
-```
+At 15:22:48 UTC the instance stopped. At 15:23:52 the watchdog fired and opened an incident on host-1. Seconds later rootgraph had the cause: host-1, stopped, with CloudTrail's `StopInstances` call right there in the timeline. Approve. The instance started, Prometheus answered on its new fixed address, the watchdog resolved its alert, and verification passed.
 
-When the same fault returns, the root-cause card says **"Seen before: INC-…"**, the cause gains +1, and the fix is pre-filled: "the same fix resolved INC-… in 52 s". The console's **Memory** page shows everything rootgraph has learned, and how often later incidents recalled it.
+**Sixty-nine seconds**, for the failure that had been completely invisible an hour earlier.
 
-![Memory: what rootgraph learned and how often it was recalled](https://raw.githubusercontent.com/guranshdeol/rootgraph-incident-responder/main/docs/img/memory.png)
+✍️ [YOUR WORDS: how it felt when that incident turned green.]
 
-## We broke a real AWS account by hand
+## From demo page to console
 
-Fixtures are easy. The real test was letting teammates change our real AWS estate in the AWS console, without telling rootgraph what they did. The estate runs in Sydney: two EC2 hosts, an RDS Postgres database, security groups, CloudTrail, and Prometheus with Alertmanager.
+One more thing we changed late: the look. Our first UI was a landing page with a "Break it" button and a big headline. It looked like a demo, because it was one. We rebuilt it as an operations console: a sign-in page, a Production/Staging switch, an overview, incidents with tabs for evidence, a change feed, an approvals audit log, a topology explorer, memory, and integrations. It's ink on paper with thin lines, and one bright colour reserved for whatever needs a person.
 
-| Change made by hand | rootgraph's conclusion | Undo | Fixed in |
-|---|---|---|---|
-| Database security group detached in the RDS console | `orders-db` lost its security group; 12 alerts across both hosts, one cause | re-attach | **52 s** |
-| host-2 stopped in the EC2 console | host-2 went running → stopped; its services are victims, not causes | start it | 64 s – 3 min |
-| A firewall rule revoked | the exact rule, and who removed it | re-add it | 92 – 140 s |
-| `docker stop payments` | payments is down; the network is fine | start it | 93 s |
-| A rule edited from port 5432 to 5433 | "rule edited", with old and new values | edit it back | verified |
-| host-1 stopped (it runs the monitoring) | the watchdog fired; host-1 was stopped | start it | **69 s** |
+![The rootgraph console](https://raw.githubusercontent.com/guranshdeol/rootgraph-incident-responder/main/docs/img/overview.png)
 
-The times run from incident open to verified fix, and they include a person reading the proposal and clicking Approve.
+## Why it had to be a graph
 
-### What broke when reality hit
+If you took FalkorDB out, rootgraph would stop working. That isn't because we store things in it. It's because every question it asks is a graph question. Which resource do ten alerts share? A variable-length walk. Is this dependency allowed? A join across services, hosts, security groups and rules. What else breaks if this goes down? A reverse walk. What does most of the estate lean on? `algo.pageRank`. Have we fixed this before? One hop from the incident to its root cause and verified action.
 
-The live runs found bugs the fake-AWS tests never could. Our favourite three:
+It's also fast enough to be careless with. The graph queries in an investigation's trace take 0 to 2 milliseconds each, so we check every dependency of every suspect on every incident without thinking twice. And when we needed to clean up test data before recording our demo, `GRAPH.COPY` gave us a full backup in one command.
 
-1. **Stopping the monitoring host opened no incident.** host-1 runs Prometheus and Alertmanager. With it down, *nothing could alert*. The graph recorded `running → stopped`, but changes alone don't open incidents. The fix is a **watchdog** outside the estate: the control plane checks Prometheus every 20 s, and after three failures it files a `MonitoringUnreachable` alert on the Prometheus host. That alert opens an incident like any other, and the watchdog resolves it once Prometheus answers again. Verified live: resolved in 69 s.
-2. **The monitoring host's IP changed on restart.** Without an Elastic IP, every probe after a restart went to a dead address, so the evidence was all "unknown" and verification couldn't see recovery. The fix was a fixed address for host-1.
-3. **A rule removed on a *host's* security group was missed.** Our path check only looked at security groups on the dependency target, so `web → orders` (a service on another host) was never checked. That's the `coalesce(yh, y)` in Q4 above: the guarded node is now the target service's host. A teammate found it by doing two things at once (removing host-2's rule *and* stopping host-2). rootgraph found only the stop, so verification failed. That was the right outcome: it refused to call the incident fixed while alerts still fired.
+## What we'd tell ourselves on Thursday
 
-Other bugs: an Alertmanager webhook waiting behind a slow investigation, a 120 s verification window too short for real alert lag, an IAM policy that needed permission on a rule's *source* group, and a failed fix that left the incident stuck instead of investigating again. Each one is fixed with a regression test (88 tests in total).
-
-## The console
-
-We started with a demo page and threw it away. Judges, and real teams, want a product, not a landing page. rootgraph is now a sign-in-protected **operations console** with two environments: **Production** (the real AWS account) and **Staging** (a simulated copy for fault drills).
-
-![The rootgraph console overview](https://raw.githubusercontent.com/guranshdeol/rootgraph-incident-responder/main/docs/img/overview.png)
-
-- **Overview:** open incidents, fixes awaiting approval, time to resolve, and the most load-bearing resources (FalkorDB's `algo.pageRank` over the dependency graph).
-- **Incidents:** Summary (the cause in one sentence, the fix, a timeline that marks the change that caused it), Evidence (the scorecard), Graph, and Agent trace.
-- **Changes:** every change in the account, by person, rootgraph or discovery.
-- **Actions:** the approval audit log.
-- **Topology:** click any resource for its blast radius, dependencies, security groups and changes.
-- **Memory** and **Integrations**: what it learned, and what is connected and allowed.
-
-The design is deliberately quiet: ink on paper, hairlines, and one chartreuse colour reserved for whatever needs a person.
-
-## Why FalkorDB
-
-Take FalkorDB out and rootgraph doesn't work:
-- **The questions are graph questions.** Which resource do ten alerts share is a variable-length upward traversal (Q2). Is this dependency allowed is a multi-hop join over services, hosts, security groups and rules (Q4). What else breaks is a reverse traversal (Q6). What's load-bearing is `algo.pageRank` (Q8), and the shortest dependency path is `algo.SPpaths` (Q3).
-- **One store for everything.** Topology, history, incidents, fixes and memory are connected, so "what changed near this resource?" and "have we fixed this before?" are one hop away.
-- **It's fast.** The graph queries in the agent trace run in 0–2 ms each. That's what makes it cheap to check every dependency of every suspect on each investigation.
-- **Operations were easy.** One Docker container on our Linode, password-protected and bound to localhost. `GRAPH.COPY` gave us an instant backup before we cleaned up test data.
-
-There are 64 fixed query files in the repo (33 read, 31 write), each documented with its Cypher in `docs/graph.md`.
-
-## Limitations
-
-- The scoring weights are heuristic, tuned on nine fixture scenarios.
-- With two simultaneous causes, both are ranked and each gets a fix, but the alerts aren't split between them.
-- Service dependencies are declared, not learned from traffic.
-- Discovery models IPv4 ingress rules only.
+- **Keep what was deleted.** The most valuable edge in our graph is one that no longer exists in AWS.
+- **Don't let the AI write the queries.** Give it good tools, make it explain its choices, and validate what it says.
+- **Break the real thing, by hand, with someone who wants to win.** Our tests passed the whole time. The real account found the bugs that mattered.
+- **Watch the watcher.** If your monitoring lives on the infrastructure it monitors, you need something outside it.
 
 ## Try it
 
-- **Repository:** https://github.com/guranshdeol/rootgraph-incident-responder. The README has a judges' checklist, the graph model, every core query, and 4-command Docker setup. Staging needs no cloud account.
-- **Live console:** https://172-232-86-149.sslip.io (sign-in required).
+The code, the graph model, every Cypher query and a four-command Docker setup are at **[github.com/guranshdeol/rootgraph-incident-responder](https://github.com/guranshdeol/rootgraph-incident-responder)**. The Staging environment needs no AWS account: run a drill, approve the fix, and watch it land in memory.
 
-**Built with AI assistance.** We used Claude Code (Anthropic's Claude models) throughout, for code, tests and documentation. We chose the problem, the graph model and the design, broke the system on real AWS ourselves, and fed every failure back as a fix. `DECISIONS.md` in the repo records why each non-obvious choice was made.
+*We built rootgraph with AI coding assistants (Claude Code), and we say so in the README. The problem, the graph model, the decisions, and every bug we found by breaking our own AWS account are ours.*
 
 *Many alerts, one cause. The graph decides, the agent explains, and a human acts.*
