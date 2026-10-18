@@ -94,8 +94,6 @@ The team broke the real estate (Sydney, `ap-southeast-2`) by hand, and nobody to
 | `docker stop payments` on host-1 | payments is down; the network is fine | start the container | 93 s |
 | A firewall rule edited, port 5432 → 5433 | "rule edited", with the old and new values | edit it back | verified |
 
-The live runs also found 11 bugs that fake-AWS tests could not, each fixed with a regression test. Examples: a webhook blocked behind a slow investigation, verification windows that were too short, IAM gaps, and the monitoring host's public IP changing on restart. They are listed in [DECISIONS.md](DECISIONS.md).
-
 ## The console
 
 A sign-in-protected operations console with two environments: **Production** (the real AWS estate) and **Staging** (a simulated copy for fault drills).
@@ -255,7 +253,7 @@ uv sync && set -a && . ./.env && set +a && FALKORDB_HOST=localhost PROMETHEUS_UR
 
 This project was built with AI coding assistants, as the rules allow, and we disclose it here. **Claude Code** (Anthropic's Claude Opus and Claude Haiku models) was used throughout to write code, tests and documentation.
 
-The team chose the problem, the scope, the graph model and every design decision, and reviewed the queries and the code. They ran the system against the fixtures and against their own AWS account, breaking it by hand in ways the tests had not anticipated and feeding the failures back as fixes. [`plan.md`](plan.md) holds the plan, and [`DECISIONS.md`](DECISIONS.md) records the reason for each non-obvious choice and every bug found live.
+The team chose the problem, the scope, the graph model and every design decision, and reviewed the queries and the code. They ran the system against the fixtures and against their own AWS account. [`plan.md`](plan.md) holds the plan, and [`DECISIONS.md`](DECISIONS.md) records the reason for each non-obvious choice.
 
 All work was done during the hackathon: the first commit is from 17 Oct 2026, 00:12 IST.
 

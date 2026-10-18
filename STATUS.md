@@ -9,7 +9,7 @@
 - **Real S1 runs** (README "Live on real AWS"): root cause correct (7.75 with memory), executor fix verified, 162 s from incident open to resolved. Five live-only bugs found and fixed (DECISIONS.md).
 - **Changes made by hand, verified on real AWS:** container stopped (93 s), security group detached from RDS (52 s), host-2 stopped (64 s), rule edited 5432→5433 (verified). The live page shows every change in the account and a per-incident timeline marking the change that caused it. Sandbox has the same as S6–S8.
 - Pipeline, scoring, memory, LLM agent (OpenRouter Nemotron, Ultra → Super fallback), validator, MCP server, evaluation (coverage-only 2/5 vs scorecard 5/5). 86 tests pass.
-- Docs: README, docs/graph.md (all queries), docs/evaluation.md, docs/CHECKING.md (how to check on the site), docs/blog.md (draft).
+- Docs: README, docs/graph.md (all queries), docs/evaluation.md, docs/CHECKING.md (how to check on the site). The blog post is published on Hashnode, not kept in the repo.
 
 ## How to check it
 
